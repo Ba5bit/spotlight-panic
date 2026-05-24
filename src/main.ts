@@ -10,11 +10,13 @@ import {
 } from './constants'
 import {
   calculateScore,
+  calculateScoreBreakdown,
   getRank,
   loadLeaderboard,
   saveLeaderboardEntry,
 } from './leaderboard'
 import { levels } from './levels'
+import { chooseUnique, createRunSeed, createSeededRandom } from './random'
 import type {
   AppScreen,
   CollectibleKey,
@@ -36,9 +38,15 @@ let currentLevelIndex = 0
 let activeLevel = levels[currentLevelIndex]
 let playerStart: Vec2 = { ...activeLevel.playerStart }
 let walls: Rect[] = activeLevel.walls
-let keys: CollectibleKey[] = activeLevel.keys.map((key) => ({ ...key, collected: false }))
+let keys: CollectibleKey[] = activeLevel.keySpawns
+  .slice(0, activeLevel.keyCount)
+  .map((key) => ({ ...key, collected: false }))
+let fakeKeys: CollectibleKey[] = []
 let door: Rect = { ...activeLevel.door }
-let floor67Symbols: Floor67Symbol[] = activeLevel.symbols
+let floor67Symbols: Floor67Symbol[] = [
+  { ...activeLevel.symbol6Spawns[0], value: '6' },
+  { ...activeLevel.symbol7Spawns[0], value: '7' },
+]
 let ghosts: GhostState[] = createGhosts(activeLevel, false)
 
 const player = {
@@ -69,10 +77,19 @@ let levelTransitionTime = 0
 let levelTransitionTarget: number | null = null
 let levelTransitionMessage = ''
 let currentTeamName = 'Team NPC'
+let runSeed = createRunSeed()
+let replaySeed: string | null = null
 let ghostHits = 0
+let fakeKeysTriggered = 0
+let ghostPanicTime = 0
+let lightFlickerDelay = 0
+let lightFlickerTime = 0
+let lightFlickerRng = createSeededRandom(`${runSeed}:flicker-1`)
+let levelsCleared = 0
 let latestResult: LeaderboardEntry | null = null
 let resultSaved = false
 let gameStarted = false
+let isPaused = false
 let demoMode = false
 let floor67Step: Floor67Step = 'none'
 let ritualHoldTime = 0
@@ -151,13 +168,16 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
           <span id="light-mode">Light: mouse</span>
           <span id="objective">Collect 3 keys</span>
           <span id="level-status">Level 1 / 3</span>
+          <span id="floor-difficulty">Training Floor</span>
           <span id="team-status">Team NPC</span>
           <span id="ghost-hits">Ghost hits 0</span>
+          <span id="fake-keys">Fake keys 0</span>
           <span id="marker-hud">Marker lost</span>
-          <span id="controls-hud">WASD/Arrows - M mouse - C camera - L darkness</span>
+          <span id="seed-hud">Seed -----</span>
+          <span id="controls-hud">WASD/Arrows - P pause - M mouse - C camera - L darkness</span>
+          <button id="pause-button" type="button" class="hud-button">Pause</button>
         </div>
         <canvas id="game" width="${canvasWidth}" height="${canvasHeight}" aria-label="Spotlight Panic game board"></canvas>
-        <video id="camera-preview" class="camera-preview" autoplay muted playsinline aria-label="Webcam preview"></video>
         <canvas id="camera-analysis" class="analysis-canvas" width="160" height="90" aria-hidden="true"></canvas>
         <div id="win-screen" class="win-screen hidden" role="status" aria-live="polite">
           <strong>You escaped the panic.</strong>
@@ -166,8 +186,12 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
           <span id="final-score">Score: 0</span>
           <span id="final-rank">Rank: NPC in the Dark</span>
           <span id="final-ghosts">Ghost hits: 0</span>
+          <span id="final-fakes">Fake keys: 0</span>
+          <span id="final-breakdown">20000 base - 0 time - 0 ghost - 0 fake + 0 levels</span>
+          <span id="final-seed">Seed: -----</span>
           <div class="win-actions">
             <button id="next-team" type="button">Next Team</button>
+            <button id="replay-seed" type="button">Replay Same Seed</button>
             <button id="win-leaderboard" type="button">View Leaderboard</button>
             <button id="win-menu" type="button">Back to Menu</button>
             <button id="restart" type="button">Run again</button>
@@ -186,12 +210,27 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         </div>
       </div>
 
-      <aside class="leaderboard" aria-label="Local leaderboard placeholder">
-        <h2>Local Leaderboard</h2>
+      <aside class="leaderboard score-panel" aria-label="Score calculator">
+        <div class="camera-panel" aria-label="Webcam preview panel">
+          <h2>Camera</h2>
+          <video id="camera-preview" class="camera-preview" autoplay muted playsinline aria-label="Webcam preview"></video>
+          <p>Mirrored preview. Move the bright marker the same way you want the spotlight to move.</p>
+        </div>
+        <h2>Score Calculator</h2>
+        <div class="score-total">
+          <span>Projected score</span>
+          <strong id="score-current">10000</strong>
+        </div>
         <ol>
-          <li><span>Awaiting first escape</span><strong>--:--.-</strong></li>
-          <li><span>Persistence later</span><strong>--:--.-</strong></li>
-          <li><span>Webcam chaos soon</span><strong>--:--.-</strong></li>
+          <li><span>Base score</span><strong id="score-base">+20000</strong></li>
+          <li><span>Time penalty</span><strong id="score-time">-0</strong></li>
+          <li><span>Ghost hits</span><strong id="score-ghost">-0</strong></li>
+          <li><span>Fake keys</span><strong id="score-fake">-0</strong></li>
+          <li><span>Levels cleared</span><strong id="score-levels">+0</strong></li>
+          <li><span>Floor 67 ritual</span><strong id="score-67">+0</strong></li>
+          <li><span>No-hit bonus</span><strong id="score-no-hit">+1000</strong></li>
+          <li><span>No-fake bonus</span><strong id="score-no-fake">+500</strong></li>
+          <li><span>Current rank</span><strong id="score-rank">Six Seven Certified</strong></li>
         </ol>
       </aside>
     </section>
@@ -210,10 +249,14 @@ const doorStateEl = document.querySelector<HTMLSpanElement>('#door-state')!
 const lightModeEl = document.querySelector<HTMLSpanElement>('#light-mode')!
 const objectiveEl = document.querySelector<HTMLSpanElement>('#objective')!
 const levelStatusEl = document.querySelector<HTMLSpanElement>('#level-status')!
+const floorDifficultyEl = document.querySelector<HTMLSpanElement>('#floor-difficulty')!
 const teamStatusEl = document.querySelector<HTMLSpanElement>('#team-status')!
 const ghostHitsEl = document.querySelector<HTMLSpanElement>('#ghost-hits')!
+const fakeKeysEl = document.querySelector<HTMLSpanElement>('#fake-keys')!
 const markerHudEl = document.querySelector<HTMLSpanElement>('#marker-hud')!
+const seedHudEl = document.querySelector<HTMLSpanElement>('#seed-hud')!
 const controlsHudEl = document.querySelector<HTMLSpanElement>('#controls-hud')!
+const pauseButton = document.querySelector<HTMLButtonElement>('#pause-button')!
 const winScreen = document.querySelector<HTMLDivElement>('#win-screen')!
 const calibrationScreen = document.querySelector<HTMLDivElement>('#calibration-screen')!
 const markerStatusEl = document.querySelector<HTMLSpanElement>('#marker-status')!
@@ -224,6 +267,19 @@ const finalTeamEl = document.querySelector<HTMLSpanElement>('#final-team')!
 const finalScoreEl = document.querySelector<HTMLSpanElement>('#final-score')!
 const finalRankEl = document.querySelector<HTMLSpanElement>('#final-rank')!
 const finalGhostsEl = document.querySelector<HTMLSpanElement>('#final-ghosts')!
+const finalFakesEl = document.querySelector<HTMLSpanElement>('#final-fakes')!
+const finalBreakdownEl = document.querySelector<HTMLSpanElement>('#final-breakdown')!
+const finalSeedEl = document.querySelector<HTMLSpanElement>('#final-seed')!
+const scoreCurrentEl = document.querySelector<HTMLElement>('#score-current')!
+const scoreBaseEl = document.querySelector<HTMLElement>('#score-base')!
+const scoreTimeEl = document.querySelector<HTMLElement>('#score-time')!
+const scoreGhostEl = document.querySelector<HTMLElement>('#score-ghost')!
+const scoreFakeEl = document.querySelector<HTMLElement>('#score-fake')!
+const scoreLevelsEl = document.querySelector<HTMLElement>('#score-levels')!
+const score67El = document.querySelector<HTMLElement>('#score-67')!
+const scoreNoHitEl = document.querySelector<HTMLElement>('#score-no-hit')!
+const scoreNoFakeEl = document.querySelector<HTMLElement>('#score-no-fake')!
+const scoreRankEl = document.querySelector<HTMLElement>('#score-rank')!
 const restartButton = document.querySelector<HTMLButtonElement>('#restart')!
 const landingStartButton = document.querySelector<HTMLButtonElement>('#landing-start')!
 const demoModeButton = document.querySelector<HTMLButtonElement>('#demo-mode')!
@@ -232,6 +288,7 @@ const startRunButton = document.querySelector<HTMLButtonElement>('#start-run')!
 const setupLeaderboardButton = document.querySelector<HTMLButtonElement>('#setup-leaderboard')!
 const setupMenuButton = document.querySelector<HTMLButtonElement>('#setup-menu')!
 const nextTeamButton = document.querySelector<HTMLButtonElement>('#next-team')!
+const replaySeedButton = document.querySelector<HTMLButtonElement>('#replay-seed')!
 const winLeaderboardButton = document.querySelector<HTMLButtonElement>('#win-leaderboard')!
 const winMenuButton = document.querySelector<HTMLButtonElement>('#win-menu')!
 const leaderboardNextTeamButton = document.querySelector<HTMLButtonElement>('#leaderboard-next-team')!
@@ -295,6 +352,10 @@ window.addEventListener('keydown', (event) => {
   if (key === 'r' && hasWon) {
     resetGame()
   }
+
+  if (key === 'p' && appScreen === 'game' && gameStarted && !hasWon) {
+    togglePause()
+  }
 })
 
 window.addEventListener('keyup', (event) => {
@@ -335,9 +396,15 @@ teamNameInput.addEventListener('keydown', (event) => {
   }
 })
 restartButton.addEventListener('click', resetGame)
+pauseButton.addEventListener('click', togglePause)
 nextTeamButton.addEventListener('click', () => {
   showScreen('teamSetup')
   teamNameInput.select()
+})
+replaySeedButton.addEventListener('click', () => {
+  replaySeed = runSeed
+  resetGame()
+  showScreen('game')
 })
 winLeaderboardButton.addEventListener('click', () => {
   showScreen('leaderboard')
@@ -355,6 +422,23 @@ leaderboardMenuButton.addEventListener('click', () => {
 clearLeaderboardButton.addEventListener('click', () => {
   localStorage.removeItem(leaderboardStorageKey)
   renderLeaderboard()
+})
+leaderboardList.addEventListener('click', (event) => {
+  const target = event.target
+  if (!(target instanceof HTMLButtonElement)) {
+    return
+  }
+
+  const seed = target.dataset.seed
+  if (!seed) {
+    return
+  }
+
+  replaySeed = seed
+  currentTeamName = 'Replay Team'
+  demoMode = false
+  resetGame()
+  showScreen('game')
 })
 startMouseButton.addEventListener('click', () => {
   startGameplay('mouse')
@@ -381,6 +465,7 @@ function showScreen(screen: AppScreen) {
 
   if (screen !== 'game') {
     gameStarted = false
+    isPaused = false
   }
 
   if (screen === 'leaderboard') {
@@ -406,21 +491,42 @@ function beginDemoMode() {
 }
 
 function createResultEntry() {
-  const timeMs = Math.round(finalTime * 1000)
-  const score = calculateScore(timeMs, ghostHits, floor67Step === 'complete')
+  const completionTime = Math.round(finalTime * 1000)
+  const score = calculateScore(
+    completionTime,
+    levelsCleared,
+    ghostHits,
+    fakeKeysTriggered,
+    floor67Step === 'complete',
+  )
 
   return {
     teamName: currentTeamName,
-    timeMs,
-    ghostHits,
     score,
+    completionTime,
+    levelsCleared,
+    ghostHits,
+    fakeKeysTriggered,
     rank: getRank(score),
+    seed: runSeed,
     createdAt: new Date().toISOString(),
   }
 }
 
 function formatResultTime(timeMs: number) {
   return formatTime(timeMs / 1000)
+}
+
+function getScoreBreakdownText(completionTime: number) {
+  const breakdown = calculateScoreBreakdown(
+    completionTime,
+    levelsCleared,
+    ghostHits,
+    fakeKeysTriggered,
+    floor67Step === 'complete',
+  )
+
+  return `${breakdown.baseScore} base - ${breakdown.timePenalty} time - ${breakdown.ghostPenalty} ghost - ${breakdown.fakeKeyPenalty} fake + ${breakdown.levelBonus} levels + ${breakdown.floor67Bonus} ritual + ${breakdown.noGhostBonus} no-hit + ${breakdown.noFakeKeyBonus} clean keys`
 }
 
 function escapeHtml(value: string) {
@@ -442,10 +548,35 @@ function saveWinResult() {
   resultSaved = true
 
   finalTeamEl.textContent = latestResult.teamName
-  finalTimeEl.textContent = `Completion time: ${formatResultTime(latestResult.timeMs)}`
+  finalTimeEl.textContent = `Completion time: ${formatResultTime(latestResult.completionTime)}`
   finalScoreEl.textContent = `Score: ${latestResult.score}`
   finalRankEl.textContent = `Rank: ${latestResult.rank}`
   finalGhostsEl.textContent = `Ghost hits: ${latestResult.ghostHits}`
+  finalFakesEl.textContent = `Fake keys: ${latestResult.fakeKeysTriggered}`
+  finalBreakdownEl.textContent = getScoreBreakdownText(latestResult.completionTime)
+  finalSeedEl.textContent = `Seed: ${latestResult.seed}`
+}
+
+function updateScoreCalculator() {
+  const timeMs = Math.round((hasWon ? finalTime : elapsedSeconds) * 1000)
+  const breakdown = calculateScoreBreakdown(
+    timeMs,
+    levelsCleared,
+    ghostHits,
+    fakeKeysTriggered,
+    floor67Step === 'complete',
+  )
+
+  scoreCurrentEl.textContent = breakdown.score.toString()
+  scoreBaseEl.textContent = `+${breakdown.baseScore}`
+  scoreTimeEl.textContent = `-${breakdown.timePenalty}`
+  scoreGhostEl.textContent = `-${breakdown.ghostPenalty}`
+  scoreFakeEl.textContent = `-${breakdown.fakeKeyPenalty}`
+  scoreLevelsEl.textContent = `+${breakdown.levelBonus}`
+  score67El.textContent = `+${breakdown.floor67Bonus}`
+  scoreNoHitEl.textContent = `+${breakdown.noGhostBonus}`
+  scoreNoFakeEl.textContent = `+${breakdown.noFakeKeyBonus}`
+  scoreRankEl.textContent = getRank(breakdown.score)
 }
 
 function renderLeaderboard() {
@@ -464,10 +595,13 @@ function renderLeaderboard() {
             <li>
               <span class="leaderboard-place">#${index + 1}</span>
               <span class="leaderboard-team">${escapeHtml(entry.teamName)}</span>
-              <span>${formatResultTime(entry.timeMs)}</span>
+              <span>${formatResultTime(entry.completionTime)}</span>
               <span>${entry.ghostHits} hits</span>
+              <span>${entry.fakeKeysTriggered} fake</span>
+              <span>${entry.seed}</span>
               <strong>${entry.score}</strong>
               <span>${escapeHtml(entry.rank)}</span>
+              <button type="button" data-seed="${escapeHtml(entry.seed)}">Replay Same Seed</button>
             </li>
           `,
         )
@@ -476,31 +610,81 @@ function renderLeaderboard() {
   `
 }
 
-function createGhosts(level: LevelData, isDemo: boolean) {
-  return level.ghosts.map((ghostData) => {
-    const baseSpeed = isDemo ? Math.max(22, ghostData.speed - 16) : ghostData.speed
+function createGhosts(
+  level: LevelData,
+  isDemo: boolean,
+  ghostSpawns = level.ghostSpawns.slice(0, level.ghostCount),
+) {
+  return ghostSpawns.map((spawn, index) => {
+    const template = level.ghosts[index % level.ghosts.length]
+    const tunedSpeed = template.speed * level.ghostSpeedMultiplier
+    const baseSpeed = isDemo ? Math.max(18, tunedSpeed * 0.8) : tunedSpeed
+    const waypoints = template.waypoints?.length
+      ? template.waypoints.map((waypoint) => ({ ...waypoint }))
+      : [
+          { x: spawn.x, y: spawn.y },
+          { x: spawn.x + 96, y: spawn.y },
+        ]
 
     return {
-      x: ghostData.x,
-      y: ghostData.y,
-      startX: ghostData.x,
-      startY: ghostData.y,
+      x: spawn.x,
+      y: spawn.y,
+      startX: spawn.x,
+      startY: spawn.y,
+      type: template.type,
       radius: 16,
       speed: baseSpeed,
+      patrolIndex: 0,
+      pauseTime: 0,
+      waypoints,
     }
   })
+}
+
+function getLevelSpotlightRadius(level: LevelData) {
+  return level.spotlightRadius * level.spotlightRadiusMultiplier
+}
+
+function scheduleNextLightFlicker() {
+  lightFlickerDelay = 8 + lightFlickerRng() * 4
+}
+
+function randomizeLevel(level: LevelData, levelIndex: number) {
+  const rng = createSeededRandom(`${runSeed}:level-${levelIndex + 1}`)
+  const usedKeys = new Set<string>()
+  const chosenKeys = chooseUnique(level.keySpawns, level.keyCount, rng, usedKeys)
+  const [symbol6] = chooseUnique(level.symbol6Spawns, 1, rng, usedKeys)
+  const [symbol7] = chooseUnique(level.symbol7Spawns, 1, rng, usedKeys)
+  const chosenGhosts = chooseUnique(level.ghostSpawns, level.ghostCount, rng, usedKeys)
+  const chosenFakeKeys = chooseUnique(level.fakeKeySpawns, level.fakeKeyCount, rng, usedKeys)
+
+  return {
+    fakeKeys: chosenFakeKeys,
+    ghostSpawns: chosenGhosts,
+    keys: chosenKeys,
+    symbols: [
+      { ...symbol6, value: '6' as const },
+      { ...symbol7, value: '7' as const },
+    ],
+  }
 }
 
 function loadLevel(levelIndex: number) {
   currentLevelIndex = levelIndex
   activeLevel = levels[currentLevelIndex]
+  const placement = randomizeLevel(activeLevel, currentLevelIndex)
+  lightFlickerRng = createSeededRandom(`${runSeed}:flicker-${currentLevelIndex + 1}`)
+  lightFlickerTime = 0
+  scheduleNextLightFlicker()
+
   playerStart = { ...activeLevel.playerStart }
   walls = activeLevel.walls
-  keys = activeLevel.keys.map((key) => ({ ...key, collected: false }))
+  keys = placement.keys.map((key) => ({ ...key, collected: false }))
+  fakeKeys = placement.fakeKeys.map((key) => ({ ...key, collected: false }))
   door = { ...activeLevel.door }
-  floor67Symbols = activeLevel.symbols
-  ghosts = createGhosts(activeLevel, demoMode)
-  spotlight.radius = activeLevel.spotlightRadius
+  floor67Symbols = placement.symbols
+  ghosts = createGhosts(activeLevel, demoMode, placement.ghostSpawns)
+  spotlight.radius = getLevelSpotlightRadius(activeLevel)
   spotlight.x = playerStart.x + 124
   spotlight.y = playerStart.y
   spotlight.targetX = spotlight.x
@@ -525,8 +709,13 @@ function resetLevelState() {
 
 function resetGame() {
   currentLevelIndex = 0
+  runSeed = replaySeed ?? createRunSeed()
+  replaySeed = null
   elapsedSeconds = 0
   ghostHits = 0
+  fakeKeysTriggered = 0
+  ghostPanicTime = 0
+  levelsCleared = 0
   hasWon = false
   finalTime = 0
   levelTransitionTime = 0
@@ -534,6 +723,7 @@ function resetGame() {
   levelTransitionMessage = ''
   latestResult = null
   resultSaved = false
+  isPaused = false
   gameMessage = null
   flashEffect = null
   loadLevel(0)
@@ -545,9 +735,20 @@ function resetGame() {
 function startGameplay(mode: SpotlightMode) {
   setSpotlightMode(mode)
   gameStarted = true
+  isPaused = false
   lastFrame = performance.now()
   calibrationScreen.classList.add('hidden')
   initAudio()
+}
+
+function togglePause() {
+  if (appScreen !== 'game' || !gameStarted || hasWon) {
+    return
+  }
+
+  isPaused = !isPaused
+  pauseButton.textContent = isPaused ? 'Resume' : 'Pause'
+  showMessage(isPaused ? 'PAUSED' : 'RESUME', 0.5, 'cyan')
 }
 
 function showMessage(
@@ -635,8 +836,12 @@ function updateCameraStatus() {
   cameraDetailEl.textContent = cameraError || 'Camera starting...'
 }
 
-// Webcam tracking: sample the video every 100ms, find very bright pixels, average their
-// position, mirror X for natural movement, and move only the target so the spotlight lerps.
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(value, max))
+}
+
+// Webcam tracking: sample the video every 100ms, find near-white pixels, weight the
+// brightest ones most, and stretch the camera range so edge movement reaches the map edges.
 function analyzeCameraFrame() {
   if (!cameraReady || cameraPreview.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
     markerDetected = false
@@ -646,12 +851,17 @@ function analyzeCameraFrame() {
 
   const width = analysisCanvas.width
   const height = analysisCanvas.height
+  analysisContext.save()
+  analysisContext.translate(width, 0)
+  analysisContext.scale(-1, 1)
   analysisContext.drawImage(cameraPreview, 0, 0, width, height)
+  analysisContext.restore()
 
   const frame = analysisContext.getImageData(0, 0, width, height)
   let brightPixels = 0
-  let totalX = 0
-  let totalY = 0
+  let weightedX = 0
+  let weightedY = 0
+  let totalWeight = 0
 
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
@@ -660,24 +870,28 @@ function analyzeCameraFrame() {
       const green = frame.data[index + 1]
       const blue = frame.data[index + 2]
       const brightness = (red + green + blue) / 3
+      const colorSpread = Math.max(red, green, blue) - Math.min(red, green, blue)
 
-      if (brightness > 220 && red > 205 && green > 205 && blue > 205) {
+      if (brightness > 238 && red > 228 && green > 228 && blue > 228 && colorSpread < 26) {
+        const weight = Math.max(1, brightness - 232)
         brightPixels += 1
-        totalX += x
-        totalY += y
+        totalWeight += weight
+        weightedX += x * weight
+        weightedY += y * weight
       }
     }
   }
 
-  markerDetected = brightPixels > 12
+  markerDetected = brightPixels > 5 && totalWeight > 0
 
   if (markerDetected && spotlightMode === 'camera') {
-    const averageX = totalX / brightPixels
-    const averageY = totalY / brightPixels
-    const mirroredX = width - averageX
+    const averageX = weightedX / totalWeight
+    const averageY = weightedY / totalWeight
+    const normalizedX = clamp((averageX - width * 0.08) / (width * 0.84), 0, 1)
+    const normalizedY = clamp((averageY - height * 0.08) / (height * 0.84), 0, 1)
 
-    spotlight.targetX = (mirroredX / width) * canvasWidth
-    spotlight.targetY = (averageY / height) * canvasHeight
+    spotlight.targetX = normalizedX * canvasWidth
+    spotlight.targetY = normalizedY * canvasHeight
   }
 
   updateCameraStatus()
@@ -741,7 +955,89 @@ function respawnPlayerWithPenalty() {
   ghosts.forEach((ghost) => {
     ghost.x = ghost.startX
     ghost.y = ghost.startY
+    ghost.pauseTime = 0
+    ghost.patrolIndex = 0
   })
+}
+
+function triggerFakeKeyPenalty() {
+  elapsedSeconds += 5
+  fakeKeysTriggered += 1
+  ghostPanicTime = 5
+  showMessage('FAKE KEY. WEAK AURA.', 1.1, 'red', true)
+  triggerFlash('rgba(255, 25, 61, 0.34)', 0.32)
+  playBeep(170, 0.16, 'sawtooth')
+}
+
+function isSpotlightOnGhost(ghost: GhostState) {
+  const distanceX = spotlight.x - ghost.x
+  const distanceY = spotlight.y - ghost.y
+
+  return Math.hypot(distanceX, distanceY) <= spotlight.radius * 0.72
+}
+
+function moveGhostToward(ghost: GhostState, target: Vec2, speed: number, deltaSeconds: number) {
+  const directionX = target.x - ghost.x
+  const directionY = target.y - ghost.y
+  const distance = Math.hypot(directionX, directionY)
+  const riskSpeed = ghostPanicTime > 0 ? speed * 1.35 : speed
+
+  if (distance <= 0) {
+    return
+  }
+
+  ghost.x += (directionX / distance) * riskSpeed * deltaSeconds
+  ghost.y += (directionY / distance) * riskSpeed * deltaSeconds
+}
+
+// Chaser: direct pressure enemy. It always heads for the player, but the spotlight slows it.
+function updateChaserGhost(ghost: GhostState, spotlighted: boolean, deltaSeconds: number) {
+  const speed = spotlighted ? ghost.speed * 0.42 : ghost.speed
+  moveGhostToward(ghost, player, speed, deltaSeconds)
+}
+
+// Patrol: route blocker. It follows waypoints and pauses briefly whenever the spotlight hits it.
+function updatePatrolGhost(ghost: GhostState, spotlighted: boolean, deltaSeconds: number) {
+  if (spotlighted) {
+    ghost.pauseTime = Math.max(ghost.pauseTime, 0.35)
+  }
+
+  ghost.pauseTime = Math.max(0, ghost.pauseTime - deltaSeconds)
+  if (ghost.pauseTime > 0 || ghost.waypoints.length === 0) {
+    return
+  }
+
+  const target = ghost.waypoints[ghost.patrolIndex % ghost.waypoints.length]
+  if (Math.hypot(target.x - ghost.x, target.y - ghost.y) < 8) {
+    ghost.patrolIndex = (ghost.patrolIndex + 1) % ghost.waypoints.length
+  }
+
+  moveGhostToward(ghost, target, ghost.speed, deltaSeconds)
+}
+
+// Stalker: light-check enemy. It advances only in darkness and freezes under the spotlight.
+function updateStalkerGhost(ghost: GhostState, spotlighted: boolean, deltaSeconds: number) {
+  if (spotlighted) {
+    return
+  }
+
+  moveGhostToward(ghost, player, ghost.speed, deltaSeconds)
+}
+
+function updateGhost(ghost: GhostState, deltaSeconds: number) {
+  const spotlighted = isSpotlightOnGhost(ghost)
+
+  if (ghost.type === 'patrol') {
+    updatePatrolGhost(ghost, spotlighted, deltaSeconds)
+    return
+  }
+
+  if (ghost.type === 'stalker') {
+    updateStalkerGhost(ghost, spotlighted, deltaSeconds)
+    return
+  }
+
+  updateChaserGhost(ghost, spotlighted, deltaSeconds)
 }
 
 function isDoorOpen() {
@@ -869,6 +1165,7 @@ function updateFeedback(deltaSeconds: number) {
 
 function beginLevelTransition() {
   const nextLevelIndex = currentLevelIndex + 1
+  levelsCleared = Math.max(levelsCleared, currentLevelIndex + 1)
 
   if (nextLevelIndex >= levels.length) {
     hasWon = true
@@ -905,6 +1202,28 @@ function updateLevelTransition(deltaSeconds: number) {
   return true
 }
 
+// Floor 67 flicker: every 8-12 seconds the spotlight contracts briefly, then recovers.
+function updateLightFlicker(deltaSeconds: number) {
+  if (demoMode || !activeLevel.flicker) {
+    lightFlickerDelay = 0
+    lightFlickerTime = 0
+    return
+  }
+
+  if (lightFlickerTime > 0) {
+    lightFlickerTime = Math.max(0, lightFlickerTime - deltaSeconds)
+    if (lightFlickerTime === 0) {
+      scheduleNextLightFlicker()
+    }
+    return
+  }
+
+  lightFlickerDelay = Math.max(0, lightFlickerDelay - deltaSeconds)
+  if (lightFlickerDelay === 0) {
+    lightFlickerTime = 0.5
+  }
+}
+
 // Game loop: advance the timer, read controls, update pickups, chase, and win state.
 function update(deltaSeconds: number) {
   spotlight.x += (spotlight.targetX - spotlight.x) * 0.18
@@ -915,11 +1234,16 @@ function update(deltaSeconds: number) {
     return
   }
 
+  if (isPaused) {
+    return
+  }
+
   if (updateLevelTransition(deltaSeconds)) {
     return
   }
 
   elapsedSeconds += deltaSeconds
+  updateLightFlicker(deltaSeconds)
 
   const movement: Vec2 = { x: 0, y: 0 }
   if (input.has('w') || input.has('arrowup')) movement.y -= 1
@@ -945,17 +1269,18 @@ function update(deltaSeconds: number) {
     }
   })
 
+  fakeKeys.forEach((key) => {
+    if (!key.collected && circlesOverlap(player, { ...key, radius: 13 })) {
+      key.collected = true
+      triggerFakeKeyPenalty()
+    }
+  })
+
   updateFloor67Ritual(deltaSeconds)
+  ghostPanicTime = Math.max(0, ghostPanicTime - deltaSeconds)
 
   for (const ghost of ghosts) {
-    const ghostDirectionX = player.x - ghost.x
-    const ghostDirectionY = player.y - ghost.y
-    const ghostDistance = Math.hypot(ghostDirectionX, ghostDirectionY)
-
-    if (ghostDistance > 0) {
-      ghost.x += (ghostDirectionX / ghostDistance) * ghost.speed * deltaSeconds
-      ghost.y += (ghostDirectionY / ghostDistance) * ghost.speed * deltaSeconds
-    }
+    updateGhost(ghost, deltaSeconds)
 
     if (circlesOverlap(player, ghost)) {
       respawnPlayerWithPenalty()
@@ -1004,6 +1329,40 @@ function drawWalls() {
 }
 
 function drawKeys() {
+  fakeKeys.forEach((key) => {
+    if (key.collected) {
+      return
+    }
+
+    ctx.save()
+    ctx.globalAlpha = 0.86
+    ctx.shadowColor = '#ff3f73'
+    ctx.shadowBlur = 14
+    ctx.strokeStyle = '#ffd966'
+    ctx.fillStyle = '#ffeeb0'
+    ctx.lineWidth = 3
+    ctx.beginPath()
+    ctx.arc(key.x, key.y, 7, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.moveTo(key.x + 7, key.y)
+    ctx.lineTo(key.x + 25, key.y)
+    ctx.lineTo(key.x + 25, key.y + 8)
+    ctx.moveTo(key.x + 17, key.y)
+    ctx.lineTo(key.x + 17, key.y + 7)
+    ctx.stroke()
+    ctx.shadowBlur = 0
+    ctx.strokeStyle = '#ff3f73'
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.moveTo(key.x - 3, key.y - 5)
+    ctx.lineTo(key.x + 3, key.y + 5)
+    ctx.moveTo(key.x + 18, key.y - 3)
+    ctx.lineTo(key.x + 23, key.y + 4)
+    ctx.stroke()
+    ctx.restore()
+  })
+
   keys.forEach((key) => {
     if (key.collected) {
       return
@@ -1191,6 +1550,30 @@ function drawLevelTransitionOverlay() {
   ctx.restore()
 }
 
+function drawPauseOverlay() {
+  if (!isPaused) {
+    return
+  }
+
+  ctx.save()
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.52)'
+  ctx.fillRect(0, 0, canvasWidth, canvasHeight)
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.font = '900 58px Inter, system-ui, sans-serif'
+  ctx.shadowColor = '#52ffe4'
+  ctx.shadowBlur = 24
+  ctx.fillStyle = '#e9fbff'
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)'
+  ctx.lineWidth = 8
+  ctx.strokeText('PAUSED', canvasWidth / 2, canvasHeight / 2)
+  ctx.fillText('PAUSED', canvasWidth / 2, canvasHeight / 2)
+  ctx.font = '900 20px Inter, system-ui, sans-serif'
+  ctx.fillStyle = '#ffe45c'
+  ctx.fillText('Press P or Resume', canvasWidth / 2, canvasHeight / 2 + 48)
+  ctx.restore()
+}
+
 function drawPlayer() {
   ctx.save()
   ctx.shadowColor = '#5fffee'
@@ -1206,10 +1589,31 @@ function drawPlayer() {
 }
 
 function drawGhost(ghost: GhostState) {
+  const ghostPalette = {
+    chaser: {
+      body: '#d9d7ff',
+      eye: '#ff193d',
+      shadow: '#ff3158',
+      stroke: '#ff3f73',
+    },
+    patrol: {
+      body: '#ffe0a3',
+      eye: '#ff6b00',
+      shadow: '#ff9f1c',
+      stroke: '#ffb84d',
+    },
+    stalker: {
+      body: '#241a34',
+      eye: '#d8b5ff',
+      shadow: '#9b5cff',
+      stroke: '#b38cff',
+    },
+  }[ghost.type]
+
   ctx.save()
-  ctx.shadowColor = '#ff3158'
+  ctx.shadowColor = ghostPalette.shadow
   ctx.shadowBlur = 18
-  ctx.fillStyle = '#d9d7ff'
+  ctx.fillStyle = ghostPalette.body
   ctx.beginPath()
   ctx.arc(ghost.x, ghost.y, ghost.radius, Math.PI, 0)
   ctx.lineTo(ghost.x + ghost.radius, ghost.y + 14)
@@ -1219,11 +1623,22 @@ function drawGhost(ghost: GhostState) {
   ctx.lineTo(ghost.x - ghost.radius, ghost.y + 14)
   ctx.closePath()
   ctx.fill()
-  ctx.fillStyle = '#ff193d'
+  ctx.strokeStyle = ghostPalette.stroke
+  ctx.lineWidth = 2
+  ctx.stroke()
+  ctx.fillStyle = ghostPalette.eye
   ctx.beginPath()
   ctx.arc(ghost.x - 6, ghost.y - 3, 3, 0, Math.PI * 2)
   ctx.arc(ghost.x + 6, ghost.y - 3, 3, 0, Math.PI * 2)
   ctx.fill()
+
+  if (ghost.type === 'patrol') {
+    ctx.globalAlpha = 0.72
+    ctx.beginPath()
+    ctx.arc(ghost.x, ghost.y + 8, 4, 0, Math.PI * 2)
+    ctx.fill()
+  }
+
   ctx.restore()
 }
 
@@ -1238,9 +1653,7 @@ function drawDarkness() {
     return
   }
 
-  const flickerScale = activeLevel.flicker
-    ? 0.92 + Math.sin(performance.now() / 65) * 0.05 + Math.sin(performance.now() / 19) * 0.025
-    : 1
+  const flickerScale = activeLevel.flicker && !demoMode && lightFlickerTime > 0 ? 0.58 : 1
   const effectiveRadius = spotlight.radius * flickerScale
 
   darknessCtx.clearRect(0, 0, canvasWidth, canvasHeight)
@@ -1305,6 +1718,7 @@ function render() {
   drawFlashEffect()
   drawLevelTransitionOverlay()
   drawRitualOverlay()
+  drawPauseOverlay()
 
   timeEl.textContent = formatTime(hasWon ? finalTime : elapsedSeconds)
   keysEl.textContent = `Keys ${keysCollected} / ${requiredKeys}`
@@ -1312,12 +1726,17 @@ function render() {
   doorStateEl.classList.toggle('open', isDoorOpen())
   objectiveEl.textContent = getObjectiveText()
   levelStatusEl.textContent = `Level ${currentLevelIndex + 1} / ${levels.length}`
+  floorDifficultyEl.textContent = activeLevel.difficultyLabel
   teamStatusEl.textContent = currentTeamName
   ghostHitsEl.textContent = `Ghost hits ${ghostHits}`
+  fakeKeysEl.textContent = `Fake keys ${fakeKeysTriggered}`
   lightModeEl.textContent = `Mode ${spotlightMode.toUpperCase()}`
   markerHudEl.textContent = markerDetected ? 'Marker detected' : 'Marker lost'
   markerHudEl.classList.toggle('detected', markerDetected)
-  controlsHudEl.textContent = 'WASD/Arrows - M mouse - C camera - L darkness'
+  seedHudEl.textContent = `Seed ${runSeed}`
+  controlsHudEl.textContent = 'WASD/Arrows - P pause - M mouse - C camera - L darkness'
+  pauseButton.textContent = isPaused ? 'Resume' : 'Pause'
+  updateScoreCalculator()
 }
 
 function gameLoop(now: number) {

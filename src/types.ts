@@ -22,23 +22,44 @@ export type Floor67Symbol = Vec2 & {
   value: '6' | '7'
 }
 
+export type EnemyType = 'chaser' | 'patrol' | 'stalker'
+
 export type GhostState = Vec2 & {
+  type: EnemyType
   radius: number
   speed: number
   startX: number
   startY: number
+  patrolIndex: number
+  pauseTime: number
+  waypoints: Vec2[]
 }
 
 export type LevelData = {
   name: string
+  difficultyLabel: string
   playerStart: Vec2
   spotlightRadius: number
+  spotlightRadiusMultiplier: number
+  ghostSpeedMultiplier: number
   flicker: boolean
   walls: Rect[]
-  keys: Vec2[]
+  keyCount: number
+  ghostCount: number
+  fakeKeyCount: number
+  keySpawns: Vec2[]
+  ghostSpawns: Vec2[]
+  symbol6Spawns: Vec2[]
+  symbol7Spawns: Vec2[]
+  fakeKeySpawns: Vec2[]
   door: Rect
-  symbols: Floor67Symbol[]
-  ghosts: Array<Vec2 & { speed: number }>
+  ghosts: Array<
+    Vec2 & {
+      speed: number
+      type: EnemyType
+      waypoints?: Vec2[]
+    }
+  >
 }
 
 export type RitualFlash = Vec2 & {
@@ -47,10 +68,13 @@ export type RitualFlash = Vec2 & {
 
 export type LeaderboardEntry = {
   teamName: string
-  timeMs: number
-  ghostHits: number
   score: number
+  completionTime: number
+  levelsCleared: number
+  ghostHits: number
+  fakeKeysTriggered: number
   rank: string
+  seed: string
   createdAt: string
 }
 

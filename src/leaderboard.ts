@@ -2,20 +2,66 @@ import { leaderboardStorageKey } from './constants'
 import type { LeaderboardEntry } from './types'
 
 export function getRank(score: number) {
-  if (score >= 9000) return 'Six Seven Certified'
-  if (score >= 7500) return 'Light Operator'
-  if (score >= 6000) return 'Ghost Dodger'
-  if (score >= 4000) return 'Weak Aura Survivor'
+  if (score >= 18000) return 'Six Seven Certified'
+  if (score >= 15000) return 'Elite Light Operator'
+  if (score >= 12000) return 'Ghost Dodger'
+  if (score >= 9000) return 'Weak Aura Survivor'
 
   return 'NPC in the Dark'
 }
 
-export function calculateScore(timeMs: number, hits: number, floor67Complete: boolean) {
-  const completionTimeSeconds = timeMs / 1000
-  const floor67Bonus = floor67Complete ? 670 : 0
-  const score = 10000 - Math.floor(completionTimeSeconds * 50) - hits * 500 + floor67Bonus
+export function calculateScore(
+  completionTime: number,
+  levelsCleared: number,
+  ghostHits: number,
+  fakeKeysTriggered: number,
+  floor67Complete: boolean,
+) {
+  return calculateScoreBreakdown(
+    completionTime,
+    levelsCleared,
+    ghostHits,
+    fakeKeysTriggered,
+    floor67Complete,
+  ).score
+}
 
-  return Math.max(0, score)
+export function calculateScoreBreakdown(
+  completionTime: number,
+  levelsCleared: number,
+  ghostHits: number,
+  fakeKeysTriggered: number,
+  floor67Complete: boolean,
+) {
+  const completionTimeSeconds = completionTime / 1000
+  const floor67Bonus = floor67Complete ? 670 : 0
+  const timePenalty = Math.floor(completionTimeSeconds * 60)
+  const ghostPenalty = ghostHits * 700
+  const fakeKeyPenalty = fakeKeysTriggered * 400
+  const levelBonus = levelsCleared * 1000
+  const noGhostBonus = ghostHits === 0 ? 1000 : 0
+  const noFakeKeyBonus = fakeKeysTriggered === 0 ? 500 : 0
+  const score =
+    20000 -
+    timePenalty -
+    ghostPenalty -
+    fakeKeyPenalty +
+    levelBonus +
+    floor67Bonus +
+    noGhostBonus +
+    noFakeKeyBonus
+
+  return {
+    baseScore: 20000,
+    fakeKeyPenalty,
+    floor67Bonus,
+    ghostPenalty,
+    levelBonus,
+    noFakeKeyBonus,
+    noGhostBonus,
+    score: Math.max(0, score),
+    timePenalty,
+  }
 }
 
 export function loadLeaderboard() {
@@ -41,7 +87,7 @@ export function sortLeaderboard(first: LeaderboardEntry, second: LeaderboardEntr
     return second.score - first.score
   }
 
-  return first.timeMs - second.timeMs
+  return first.completionTime - second.completionTime
 }
 
 export function saveLeaderboardEntry(entry: LeaderboardEntry) {
@@ -58,10 +104,13 @@ function isLeaderboardEntry(entry: unknown): entry is LeaderboardEntry {
 
   return (
     typeof candidate.teamName === 'string' &&
-    typeof candidate.timeMs === 'number' &&
-    typeof candidate.ghostHits === 'number' &&
     typeof candidate.score === 'number' &&
+    typeof candidate.completionTime === 'number' &&
+    typeof candidate.levelsCleared === 'number' &&
+    typeof candidate.ghostHits === 'number' &&
+    typeof candidate.fakeKeysTriggered === 'number' &&
     typeof candidate.rank === 'string' &&
+    typeof candidate.seed === 'string' &&
     typeof candidate.createdAt === 'string'
   )
 }

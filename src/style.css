@@ -106,7 +106,8 @@ h1 {
 }
 
 .control-hints span,
-.hud span {
+.hud span,
+.hud-button {
   border: 1px solid var(--border);
   background: rgba(5, 6, 10, 0.72);
   box-shadow: var(--shadow-cyan);
@@ -231,7 +232,7 @@ h1 {
 }
 
 .leaderboard-panel {
-  width: min(980px, 100%);
+  width: min(1120px, 100%);
 }
 
 .leaderboard-list {
@@ -249,7 +250,7 @@ h1 {
 
 .leaderboard-list li {
   display: grid;
-  grid-template-columns: 48px minmax(150px, 1.5fr) 88px 78px 78px minmax(130px, 1fr);
+  grid-template-columns: 44px minmax(120px, 1.2fr) 78px 66px 68px 86px 72px minmax(120px, 1fr) 130px;
   gap: 10px;
   align-items: center;
   min-height: 44px;
@@ -257,6 +258,29 @@ h1 {
   border: 1px solid rgba(255, 255, 255, 0.09);
   background: var(--panel-strong);
   color: var(--muted);
+}
+
+.leaderboard-list li > * {
+  min-width: 0;
+}
+
+.leaderboard-list button {
+  min-height: 34px;
+  padding: 0 8px;
+  border: 1px solid var(--cyan);
+  background: rgba(7, 17, 15, 0.86);
+  color: var(--cyan);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.leaderboard-list button:hover,
+.leaderboard-list button:focus-visible {
+  background: var(--cyan);
+  color: #06100e;
+  outline: none;
 }
 
 .leaderboard-list strong,
@@ -300,6 +324,23 @@ h1 {
   text-align: center;
 }
 
+.hud-button {
+  min-height: 34px;
+  padding: 7px 10px;
+  color: var(--cyan);
+  font: inherit;
+  font-weight: 900;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.hud-button:hover,
+.hud-button:focus-visible {
+  background: var(--cyan);
+  color: #06100e;
+  outline: none;
+}
+
 #door-state {
   color: var(--pink);
   text-shadow: 0 0 12px rgba(255, 63, 115, 0.8);
@@ -331,6 +372,11 @@ h1 {
   text-shadow: 0 0 12px rgba(35, 255, 145, 0.8);
 }
 
+#seed-hud {
+  color: var(--cyan);
+  text-shadow: 0 0 12px rgba(82, 255, 228, 0.65);
+}
+
 #controls-hud {
   grid-column: span 2;
   color: var(--muted);
@@ -351,18 +397,31 @@ canvas {
 }
 
 .camera-preview {
-  position: absolute;
-  top: 132px;
-  right: 12px;
-  z-index: 2;
-  width: 150px;
+  display: block;
+  width: 100%;
   aspect-ratio: 16 / 9;
   border: 1px solid rgba(255, 255, 255, 0.28);
   background: #000000;
+  border-radius: 4px;
   box-shadow:
     0 0 0 2px rgba(0, 0, 0, 0.7),
     0 0 20px rgba(82, 255, 228, 0.32);
   object-fit: cover;
+  transform: scaleX(-1);
+}
+
+.camera-panel {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 18px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(82, 255, 228, 0.22);
+}
+
+.camera-panel p {
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.35;
 }
 
 .analysis-canvas {
@@ -411,6 +470,58 @@ canvas {
   color: var(--yellow);
   white-space: nowrap;
   text-shadow: 0 0 12px rgba(255, 228, 92, 0.65);
+}
+
+.score-panel {
+  border-color: rgba(82, 255, 228, 0.42);
+  background:
+    linear-gradient(180deg, rgba(82, 255, 228, 0.14), transparent 130px),
+    var(--panel);
+  box-shadow: var(--shadow-cyan);
+}
+
+.score-panel h2 {
+  text-shadow: 0 0 12px rgba(82, 255, 228, 0.85);
+}
+
+.score-total {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 12px;
+  border: 1px solid rgba(255, 228, 92, 0.32);
+  background: rgba(0, 0, 0, 0.42);
+  color: var(--yellow);
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.score-total strong {
+  font-size: 1.6rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.score-panel li {
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.score-panel li span {
+  min-width: 0;
+}
+
+.score-panel li strong {
+  flex: 1 1 96px;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  text-align: right;
+  white-space: normal;
 }
 
 .win-screen {
@@ -514,12 +625,18 @@ canvas {
   }
 
   .leaderboard-list li {
-    grid-template-columns: 42px minmax(140px, 1fr) 80px;
+    grid-template-columns: 42px minmax(120px, 1fr) 74px 74px;
   }
 
   .leaderboard-list li span:nth-child(4),
-  .leaderboard-list li span:nth-child(6) {
+  .leaderboard-list li span:nth-child(5),
+  .leaderboard-list li span:nth-child(6),
+  .leaderboard-list li span:nth-child(8) {
     display: none;
+  }
+
+  .leaderboard-list button {
+    grid-column: 2 / -1;
   }
 }
 
@@ -562,9 +679,4 @@ canvas {
     inset: 220px 0 0;
   }
 
-  .camera-preview {
-    top: 232px;
-    right: 8px;
-    width: 112px;
-  }
 }
