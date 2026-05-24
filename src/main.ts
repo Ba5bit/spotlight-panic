@@ -1,190 +1,36 @@
 import './style.css'
-
-type Vec2 = {
-  x: number
-  y: number
-}
-
-type Rect = {
-  x: number
-  y: number
-  width: number
-  height: number
-}
-
-type CollectibleKey = Vec2 & {
-  collected: boolean
-}
-
-type SpotlightMode = 'mouse' | 'camera'
-type AppScreen = 'landing' | 'teamSetup' | 'game' | 'leaderboard'
-type Floor67Step = 'none' | 'need6' | 'need7' | 'complete'
-type Floor67Symbol = Vec2 & {
-  value: '6' | '7'
-}
-type GhostState = Vec2 & {
-  radius: number
-  speed: number
-  startX: number
-  startY: number
-}
-type LevelData = {
-  name: string
-  playerStart: Vec2
-  spotlightRadius: number
-  flicker: boolean
-  walls: Rect[]
-  keys: Vec2[]
-  door: Rect
-  symbols: Floor67Symbol[]
-  ghosts: Array<Vec2 & { speed: number }>
-}
-type RitualFlash = Vec2 & {
-  timeLeft: number
-}
-type LeaderboardEntry = {
-  teamName: string
-  timeMs: number
-  ghostHits: number
-  score: number
-  rank: string
-  createdAt: string
-}
-type FlashEffect = {
-  color: string
-  timeLeft: number
-  duration: number
-}
-type GameMessageTone = 'cyan' | 'green' | 'red' | 'yellow'
-type GameMessage = {
-  text: string
-  timeLeft: number
-  duration: number
-  tone: GameMessageTone
-  glitch: boolean
-}
-
-const canvasWidth = 960
-const canvasHeight = 540
-const requiredKeys = 3
-const ritualHoldSeconds = 1
-const ritualSpotlightRange = 58
-const leaderboardStorageKey = 'spotlight-panic-leaderboard'
-const normalGhostSpeed = 46
-
-const borderWalls: Rect[] = [
-  { x: 0, y: 0, width: 960, height: 22 },
-  { x: 0, y: 518, width: 960, height: 22 },
-  { x: 0, y: 0, width: 22, height: 540 },
-  { x: 938, y: 0, width: 22, height: 540 },
-]
-
-const levels: LevelData[] = [
-  {
-    name: 'Level 1',
-    playerStart: { x: 62, y: 270 },
-    spotlightRadius: 124,
-    flicker: false,
-    walls: [
-      ...borderWalls,
-      { x: 118, y: 76, width: 38, height: 292 },
-      { x: 118, y: 438, width: 230, height: 36 },
-      { x: 222, y: 22, width: 36, height: 136 },
-      { x: 222, y: 224, width: 36, height: 196 },
-      { x: 332, y: 86, width: 270, height: 34 },
-      { x: 332, y: 120, width: 34, height: 198 },
-      { x: 444, y: 188, width: 36, height: 210 },
-      { x: 536, y: 180, width: 220, height: 34 },
-      { x: 536, y: 302, width: 38, height: 154 },
-      { x: 656, y: 316, width: 36, height: 142 },
-      { x: 770, y: 80, width: 36, height: 284 },
-      { x: 806, y: 328, width: 92, height: 36 },
-    ],
-    keys: [
-      { x: 194, y: 410 },
-      { x: 416, y: 158 },
-      { x: 722, y: 274 },
-    ],
-    door: { x: 900, y: 224, width: 26, height: 92 },
-    symbols: [
-      { value: '6', x: 392, y: 358 },
-      { value: '7', x: 734, y: 146 },
-    ],
-    ghosts: [{ x: 842, y: 118, speed: normalGhostSpeed }],
-  },
-  {
-    name: 'Level 2',
-    playerStart: { x: 62, y: 86 },
-    spotlightRadius: 106,
-    flicker: false,
-    walls: [
-      ...borderWalls,
-      { x: 104, y: 126, width: 174, height: 34 },
-      { x: 104, y: 230, width: 36, height: 248 },
-      { x: 206, y: 250, width: 36, height: 178 },
-      { x: 266, y: 74, width: 36, height: 246 },
-      { x: 334, y: 188, width: 168, height: 34 },
-      { x: 334, y: 292, width: 36, height: 164 },
-      { x: 430, y: 22, width: 36, height: 112 },
-      { x: 510, y: 122, width: 36, height: 214 },
-      { x: 582, y: 404, width: 218, height: 34 },
-      { x: 620, y: 82, width: 34, height: 248 },
-      { x: 710, y: 176, width: 158, height: 34 },
-      { x: 794, y: 250, width: 34, height: 188 },
-      { x: 842, y: 70, width: 34, height: 90 },
-    ],
-    keys: [
-      { x: 174, y: 464 },
-      { x: 566, y: 374 },
-      { x: 862, y: 232 },
-    ],
-    door: { x: 900, y: 72, width: 26, height: 92 },
-    symbols: [
-      { value: '6', x: 392, y: 256 },
-      { value: '7', x: 848, y: 464 },
-    ],
-    ghosts: [
-      { x: 846, y: 456, speed: normalGhostSpeed + 4 },
-      { x: 686, y: 88, speed: normalGhostSpeed - 2 },
-    ],
-  },
-  {
-    name: 'Level 3',
-    playerStart: { x: 64, y: 462 },
-    spotlightRadius: 96,
-    flicker: true,
-    walls: [
-      ...borderWalls,
-      { x: 104, y: 76, width: 36, height: 284 },
-      { x: 172, y: 404, width: 190, height: 34 },
-      { x: 230, y: 22, width: 36, height: 176 },
-      { x: 302, y: 130, width: 36, height: 244 },
-      { x: 374, y: 74, width: 182, height: 34 },
-      { x: 430, y: 168, width: 36, height: 272 },
-      { x: 510, y: 250, width: 186, height: 34 },
-      { x: 584, y: 330, width: 36, height: 158 },
-      { x: 660, y: 86, width: 36, height: 116 },
-      { x: 734, y: 142, width: 36, height: 292 },
-      { x: 796, y: 70, width: 92, height: 34 },
-      { x: 844, y: 300, width: 36, height: 150 },
-    ],
-    keys: [
-      { x: 180, y: 64 },
-      { x: 530, y: 462 },
-      { x: 884, y: 130 },
-    ],
-    door: { x: 900, y: 402, width: 26, height: 92 },
-    symbols: [
-      { value: '6', x: 168, y: 386 },
-      { value: '7', x: 850, y: 238 },
-    ],
-    ghosts: [
-      { x: 830, y: 66, speed: normalGhostSpeed + 8 },
-      { x: 610, y: 468, speed: normalGhostSpeed + 3 },
-      { x: 506, y: 158, speed: normalGhostSpeed - 3 },
-    ],
-  },
-]
+import { initAudio, playBeep } from './audio'
+import {
+  canvasHeight,
+  canvasWidth,
+  leaderboardStorageKey,
+  requiredKeys,
+  ritualHoldSeconds,
+  ritualSpotlightRange,
+} from './constants'
+import {
+  calculateScore,
+  getRank,
+  loadLeaderboard,
+  saveLeaderboardEntry,
+} from './leaderboard'
+import { levels } from './levels'
+import type {
+  AppScreen,
+  CollectibleKey,
+  FlashEffect,
+  Floor67Step,
+  Floor67Symbol,
+  GameMessage,
+  GameMessageTone,
+  GhostState,
+  LeaderboardEntry,
+  LevelData,
+  Rect,
+  RitualFlash,
+  SpotlightMode,
+  Vec2,
+} from './types'
 
 let currentLevelIndex = 0
 let activeLevel = levels[currentLevelIndex]
@@ -235,7 +81,6 @@ let pendingExitMessage = false
 let flashEffect: FlashEffect | null = null
 let wrong67WarningCooldown = 0
 const ritualFlashes: RitualFlash[] = []
-let audioContext: AudioContext | null = null
 let markerDetected = false
 let cameraReady = false
 let cameraError = ''
@@ -560,74 +405,9 @@ function beginDemoMode() {
   showMessage('DEMO MODE', 1.2, 'cyan')
 }
 
-function getRank(score: number) {
-  if (score >= 9000) return 'Six Seven Certified'
-  if (score >= 7500) return 'Light Operator'
-  if (score >= 6000) return 'Ghost Dodger'
-  if (score >= 4000) return 'Weak Aura Survivor'
-
-  return 'NPC in the Dark'
-}
-
-function calculateScore(timeMs: number, hits: number) {
-  const completionTimeSeconds = timeMs / 1000
-  const floor67Bonus = floor67Step === 'complete' ? 670 : 0
-  const score = 10000 - Math.floor(completionTimeSeconds * 50) - hits * 500 + floor67Bonus
-
-  return Math.max(0, score)
-}
-
-function loadLeaderboard() {
-  try {
-    const rawEntries = localStorage.getItem(leaderboardStorageKey)
-    if (!rawEntries) {
-      return []
-    }
-
-    const parsedEntries = JSON.parse(rawEntries)
-    if (!Array.isArray(parsedEntries)) {
-      return []
-    }
-
-    return parsedEntries.filter(isLeaderboardEntry).sort(sortLeaderboard)
-  } catch {
-    return []
-  }
-}
-
-function isLeaderboardEntry(entry: unknown): entry is LeaderboardEntry {
-  if (!entry || typeof entry !== 'object') {
-    return false
-  }
-
-  const candidate = entry as Partial<LeaderboardEntry>
-
-  return (
-    typeof candidate.teamName === 'string' &&
-    typeof candidate.timeMs === 'number' &&
-    typeof candidate.ghostHits === 'number' &&
-    typeof candidate.score === 'number' &&
-    typeof candidate.rank === 'string' &&
-    typeof candidate.createdAt === 'string'
-  )
-}
-
-function sortLeaderboard(first: LeaderboardEntry, second: LeaderboardEntry) {
-  if (second.score !== first.score) {
-    return second.score - first.score
-  }
-
-  return first.timeMs - second.timeMs
-}
-
-function saveLeaderboardEntry(entry: LeaderboardEntry) {
-  const entries = [...loadLeaderboard(), entry].sort(sortLeaderboard).slice(0, 50)
-  localStorage.setItem(leaderboardStorageKey, JSON.stringify(entries))
-}
-
 function createResultEntry() {
   const timeMs = Math.round(finalTime * 1000)
-  const score = calculateScore(timeMs, ghostHits)
+  const score = calculateScore(timeMs, ghostHits, floor67Step === 'complete')
 
   return {
     teamName: currentTeamName,
@@ -768,41 +548,6 @@ function startGameplay(mode: SpotlightMode) {
   lastFrame = performance.now()
   calibrationScreen.classList.add('hidden')
   initAudio()
-}
-
-function initAudio() {
-  try {
-    audioContext ??= new AudioContext()
-    if (audioContext.state === 'suspended') {
-      audioContext.resume().catch(() => undefined)
-    }
-  } catch {
-    audioContext = null
-  }
-}
-
-function playBeep(frequency: number, duration = 0.12, type: OscillatorType = 'sine') {
-  try {
-    if (!audioContext) {
-      return
-    }
-
-    const oscillator = audioContext.createOscillator()
-    const gain = audioContext.createGain()
-    const now = audioContext.currentTime
-
-    oscillator.type = type
-    oscillator.frequency.setValueAtTime(frequency, now)
-    gain.gain.setValueAtTime(0.0001, now)
-    gain.gain.exponentialRampToValueAtTime(0.08, now + 0.02)
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + duration)
-    oscillator.connect(gain)
-    gain.connect(audioContext.destination)
-    oscillator.start(now)
-    oscillator.stop(now + duration + 0.03)
-  } catch {
-    audioContext = null
-  }
 }
 
 function showMessage(
