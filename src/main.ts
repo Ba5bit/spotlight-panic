@@ -22,6 +22,23 @@ type Floor67Step = 'none' | 'need6' | 'need7' | 'complete'
 type Floor67Symbol = Vec2 & {
   value: '6' | '7'
 }
+type GhostState = Vec2 & {
+  radius: number
+  speed: number
+  startX: number
+  startY: number
+}
+type LevelData = {
+  name: string
+  playerStart: Vec2
+  spotlightRadius: number
+  flicker: boolean
+  walls: Rect[]
+  keys: Vec2[]
+  door: Rect
+  symbols: Floor67Symbol[]
+  ghosts: Array<Vec2 & { speed: number }>
+}
 type RitualFlash = Vec2 & {
   timeLeft: number
 }
@@ -49,58 +66,140 @@ type GameMessage = {
 
 const canvasWidth = 960
 const canvasHeight = 540
-const playerStart: Vec2 = { x: 62, y: 270 }
 const requiredKeys = 3
 const ritualHoldSeconds = 1
 const ritualSpotlightRange = 58
 const leaderboardStorageKey = 'spotlight-panic-leaderboard'
 const normalGhostSpeed = 46
-const demoGhostSpeed = 30
 
-const walls: Rect[] = [
+const borderWalls: Rect[] = [
   { x: 0, y: 0, width: 960, height: 22 },
   { x: 0, y: 518, width: 960, height: 22 },
   { x: 0, y: 0, width: 22, height: 540 },
   { x: 938, y: 0, width: 22, height: 540 },
-  { x: 118, y: 76, width: 38, height: 292 },
-  { x: 118, y: 438, width: 230, height: 36 },
-  { x: 222, y: 22, width: 36, height: 136 },
-  { x: 222, y: 224, width: 36, height: 196 },
-  { x: 332, y: 86, width: 270, height: 34 },
-  { x: 332, y: 120, width: 34, height: 198 },
-  { x: 444, y: 188, width: 36, height: 210 },
-  { x: 536, y: 180, width: 220, height: 34 },
-  { x: 536, y: 302, width: 38, height: 154 },
-  { x: 656, y: 316, width: 36, height: 142 },
-  { x: 770, y: 80, width: 36, height: 284 },
-  { x: 806, y: 328, width: 92, height: 36 },
 ]
 
-const keys: CollectibleKey[] = [
-  { x: 194, y: 410, collected: false },
-  { x: 416, y: 158, collected: false },
-  { x: 722, y: 274, collected: false },
+const levels: LevelData[] = [
+  {
+    name: 'Level 1',
+    playerStart: { x: 62, y: 270 },
+    spotlightRadius: 124,
+    flicker: false,
+    walls: [
+      ...borderWalls,
+      { x: 118, y: 76, width: 38, height: 292 },
+      { x: 118, y: 438, width: 230, height: 36 },
+      { x: 222, y: 22, width: 36, height: 136 },
+      { x: 222, y: 224, width: 36, height: 196 },
+      { x: 332, y: 86, width: 270, height: 34 },
+      { x: 332, y: 120, width: 34, height: 198 },
+      { x: 444, y: 188, width: 36, height: 210 },
+      { x: 536, y: 180, width: 220, height: 34 },
+      { x: 536, y: 302, width: 38, height: 154 },
+      { x: 656, y: 316, width: 36, height: 142 },
+      { x: 770, y: 80, width: 36, height: 284 },
+      { x: 806, y: 328, width: 92, height: 36 },
+    ],
+    keys: [
+      { x: 194, y: 410 },
+      { x: 416, y: 158 },
+      { x: 722, y: 274 },
+    ],
+    door: { x: 900, y: 224, width: 26, height: 92 },
+    symbols: [
+      { value: '6', x: 392, y: 358 },
+      { value: '7', x: 734, y: 146 },
+    ],
+    ghosts: [{ x: 842, y: 118, speed: normalGhostSpeed }],
+  },
+  {
+    name: 'Level 2',
+    playerStart: { x: 62, y: 86 },
+    spotlightRadius: 106,
+    flicker: false,
+    walls: [
+      ...borderWalls,
+      { x: 104, y: 126, width: 174, height: 34 },
+      { x: 104, y: 230, width: 36, height: 248 },
+      { x: 206, y: 250, width: 36, height: 178 },
+      { x: 266, y: 74, width: 36, height: 246 },
+      { x: 334, y: 188, width: 168, height: 34 },
+      { x: 334, y: 292, width: 36, height: 164 },
+      { x: 430, y: 22, width: 36, height: 112 },
+      { x: 510, y: 122, width: 36, height: 214 },
+      { x: 582, y: 404, width: 218, height: 34 },
+      { x: 620, y: 82, width: 34, height: 248 },
+      { x: 710, y: 176, width: 158, height: 34 },
+      { x: 794, y: 250, width: 34, height: 188 },
+      { x: 842, y: 70, width: 34, height: 90 },
+    ],
+    keys: [
+      { x: 174, y: 464 },
+      { x: 566, y: 374 },
+      { x: 862, y: 232 },
+    ],
+    door: { x: 900, y: 72, width: 26, height: 92 },
+    symbols: [
+      { value: '6', x: 392, y: 256 },
+      { value: '7', x: 848, y: 464 },
+    ],
+    ghosts: [
+      { x: 846, y: 456, speed: normalGhostSpeed + 4 },
+      { x: 686, y: 88, speed: normalGhostSpeed - 2 },
+    ],
+  },
+  {
+    name: 'Level 3',
+    playerStart: { x: 64, y: 462 },
+    spotlightRadius: 96,
+    flicker: true,
+    walls: [
+      ...borderWalls,
+      { x: 104, y: 76, width: 36, height: 284 },
+      { x: 172, y: 404, width: 190, height: 34 },
+      { x: 230, y: 22, width: 36, height: 176 },
+      { x: 302, y: 130, width: 36, height: 244 },
+      { x: 374, y: 74, width: 182, height: 34 },
+      { x: 430, y: 168, width: 36, height: 272 },
+      { x: 510, y: 250, width: 186, height: 34 },
+      { x: 584, y: 330, width: 36, height: 158 },
+      { x: 660, y: 86, width: 36, height: 116 },
+      { x: 734, y: 142, width: 36, height: 292 },
+      { x: 796, y: 70, width: 92, height: 34 },
+      { x: 844, y: 300, width: 36, height: 150 },
+    ],
+    keys: [
+      { x: 180, y: 64 },
+      { x: 530, y: 462 },
+      { x: 884, y: 130 },
+    ],
+    door: { x: 900, y: 402, width: 26, height: 92 },
+    symbols: [
+      { value: '6', x: 168, y: 386 },
+      { value: '7', x: 850, y: 238 },
+    ],
+    ghosts: [
+      { x: 830, y: 66, speed: normalGhostSpeed + 8 },
+      { x: 610, y: 468, speed: normalGhostSpeed + 3 },
+      { x: 506, y: 158, speed: normalGhostSpeed - 3 },
+    ],
+  },
 ]
 
-const door: Rect = { x: 900, y: 224, width: 26, height: 92 }
-
-const floor67Symbols: Floor67Symbol[] = [
-  { value: '6', x: 392, y: 358 },
-  { value: '7', x: 734, y: 146 },
-]
+let currentLevelIndex = 0
+let activeLevel = levels[currentLevelIndex]
+let playerStart: Vec2 = { ...activeLevel.playerStart }
+let walls: Rect[] = activeLevel.walls
+let keys: CollectibleKey[] = activeLevel.keys.map((key) => ({ ...key, collected: false }))
+let door: Rect = { ...activeLevel.door }
+let floor67Symbols: Floor67Symbol[] = activeLevel.symbols
+let ghosts: GhostState[] = createGhosts(activeLevel, false)
 
 const player = {
   x: playerStart.x,
   y: playerStart.y,
   radius: 11,
   speed: 172,
-}
-
-const ghost = {
-  x: 842,
-  y: 118,
-  radius: 16,
-  speed: normalGhostSpeed,
 }
 
 const spotlight = {
@@ -120,6 +219,9 @@ let elapsedSeconds = 0
 let keysCollected = 0
 let hasWon = false
 let finalTime = 0
+let levelTransitionTime = 0
+let levelTransitionTarget: number | null = null
+let levelTransitionMessage = ''
 let currentTeamName = 'Team NPC'
 let ghostHits = 0
 let latestResult: LeaderboardEntry | null = null
@@ -203,6 +305,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
           <span id="door-state">Door locked</span>
           <span id="light-mode">Light: mouse</span>
           <span id="objective">Collect 3 keys</span>
+          <span id="level-status">Level 1 / 3</span>
           <span id="team-status">Team NPC</span>
           <span id="ghost-hits">Ghost hits 0</span>
           <span id="marker-hud">Marker lost</span>
@@ -261,6 +364,7 @@ const keysEl = document.querySelector<HTMLSpanElement>('#keys')!
 const doorStateEl = document.querySelector<HTMLSpanElement>('#door-state')!
 const lightModeEl = document.querySelector<HTMLSpanElement>('#light-mode')!
 const objectiveEl = document.querySelector<HTMLSpanElement>('#objective')!
+const levelStatusEl = document.querySelector<HTMLSpanElement>('#level-status')!
 const teamStatusEl = document.querySelector<HTMLSpanElement>('#team-status')!
 const ghostHitsEl = document.querySelector<HTMLSpanElement>('#ghost-hits')!
 const markerHudEl = document.querySelector<HTMLSpanElement>('#marker-hud')!
@@ -592,29 +696,67 @@ function renderLeaderboard() {
   `
 }
 
-function resetGame() {
+function createGhosts(level: LevelData, isDemo: boolean) {
+  return level.ghosts.map((ghostData) => {
+    const baseSpeed = isDemo ? Math.max(22, ghostData.speed - 16) : ghostData.speed
+
+    return {
+      x: ghostData.x,
+      y: ghostData.y,
+      startX: ghostData.x,
+      startY: ghostData.y,
+      radius: 16,
+      speed: baseSpeed,
+    }
+  })
+}
+
+function loadLevel(levelIndex: number) {
+  currentLevelIndex = levelIndex
+  activeLevel = levels[currentLevelIndex]
+  playerStart = { ...activeLevel.playerStart }
+  walls = activeLevel.walls
+  keys = activeLevel.keys.map((key) => ({ ...key, collected: false }))
+  door = { ...activeLevel.door }
+  floor67Symbols = activeLevel.symbols
+  ghosts = createGhosts(activeLevel, demoMode)
+  spotlight.radius = activeLevel.spotlightRadius
+  spotlight.x = playerStart.x + 124
+  spotlight.y = playerStart.y
+  spotlight.targetX = spotlight.x
+  spotlight.targetY = spotlight.y
+  resetLevelState()
+}
+
+function resetLevelState() {
   player.x = playerStart.x
   player.y = playerStart.y
-  ghost.x = 842
-  ghost.y = 118
-  ghost.speed = demoMode ? demoGhostSpeed : normalGhostSpeed
-  elapsedSeconds = 0
   keysCollected = 0
+  floor67Step = 'none'
+  ritualHoldTime = 0
+  pendingExitMessage = false
+  wrong67WarningCooldown = 0
+  ritualFlashes.length = 0
+  ghosts.forEach((ghost) => {
+    ghost.x = ghost.startX
+    ghost.y = ghost.startY
+  })
+}
+
+function resetGame() {
+  currentLevelIndex = 0
+  elapsedSeconds = 0
   ghostHits = 0
   hasWon = false
   finalTime = 0
+  levelTransitionTime = 0
+  levelTransitionTarget = null
+  levelTransitionMessage = ''
   latestResult = null
   resultSaved = false
-  floor67Step = 'none'
-  ritualHoldTime = 0
   gameMessage = null
-  pendingExitMessage = false
   flashEffect = null
-  wrong67WarningCooldown = 0
-  ritualFlashes.length = 0
-  keys.forEach((key) => {
-    key.collected = false
-  })
+  loadLevel(0)
   lastFrame = performance.now()
   winScreen.classList.add('hidden')
   calibrationScreen.classList.remove('hidden')
@@ -851,8 +993,10 @@ function respawnPlayerWithPenalty() {
   playBeep(120, 0.18, 'sawtooth')
   player.x = playerStart.x
   player.y = playerStart.y
-  ghost.x = 842
-  ghost.y = 118
+  ghosts.forEach((ghost) => {
+    ghost.x = ghost.startX
+    ghost.y = ghost.startY
+  })
 }
 
 function isDoorOpen() {
@@ -978,6 +1122,44 @@ function updateFeedback(deltaSeconds: number) {
   }
 }
 
+function beginLevelTransition() {
+  const nextLevelIndex = currentLevelIndex + 1
+
+  if (nextLevelIndex >= levels.length) {
+    hasWon = true
+    finalTime = elapsedSeconds
+    saveWinResult()
+    winScreen.classList.remove('hidden')
+    return
+  }
+
+  levelTransitionTarget = nextLevelIndex
+  levelTransitionTime = 2.25
+  levelTransitionMessage = `LEVEL ${currentLevelIndex + 1} CLEARED|ENTERING FLOOR ${nextLevelIndex + 1}`
+  showMessage(`LEVEL ${currentLevelIndex + 1} CLEARED`, 0.9, 'green', true)
+  triggerFlash('rgba(35, 255, 145, 0.28)', 0.34)
+  playBeep(760, 0.14, 'triangle')
+}
+
+function updateLevelTransition(deltaSeconds: number) {
+  if (levelTransitionTime <= 0 || levelTransitionTarget === null) {
+    return false
+  }
+
+  elapsedSeconds += deltaSeconds
+  levelTransitionTime = Math.max(0, levelTransitionTime - deltaSeconds)
+
+  if (levelTransitionTime === 0) {
+    const nextLevelIndex = levelTransitionTarget
+    levelTransitionTarget = null
+    levelTransitionMessage = ''
+    loadLevel(nextLevelIndex)
+    showMessage(`FLOOR ${nextLevelIndex + 1}`, 1, 'cyan', true)
+  }
+
+  return true
+}
+
 // Game loop: advance the timer, read controls, update pickups, chase, and win state.
 function update(deltaSeconds: number) {
   spotlight.x += (spotlight.targetX - spotlight.x) * 0.18
@@ -985,6 +1167,10 @@ function update(deltaSeconds: number) {
   updateFeedback(deltaSeconds)
 
   if (appScreen !== 'game' || !gameStarted || hasWon) {
+    return
+  }
+
+  if (updateLevelTransition(deltaSeconds)) {
     return
   }
 
@@ -1016,24 +1202,24 @@ function update(deltaSeconds: number) {
 
   updateFloor67Ritual(deltaSeconds)
 
-  const ghostDirectionX = player.x - ghost.x
-  const ghostDirectionY = player.y - ghost.y
-  const ghostDistance = Math.hypot(ghostDirectionX, ghostDirectionY)
+  for (const ghost of ghosts) {
+    const ghostDirectionX = player.x - ghost.x
+    const ghostDirectionY = player.y - ghost.y
+    const ghostDistance = Math.hypot(ghostDirectionX, ghostDirectionY)
 
-  if (ghostDistance > 0) {
-    ghost.x += (ghostDirectionX / ghostDistance) * ghost.speed * deltaSeconds
-    ghost.y += (ghostDirectionY / ghostDistance) * ghost.speed * deltaSeconds
-  }
+    if (ghostDistance > 0) {
+      ghost.x += (ghostDirectionX / ghostDistance) * ghost.speed * deltaSeconds
+      ghost.y += (ghostDirectionY / ghostDistance) * ghost.speed * deltaSeconds
+    }
 
-  if (circlesOverlap(player, ghost)) {
-    respawnPlayerWithPenalty()
+    if (circlesOverlap(player, ghost)) {
+      respawnPlayerWithPenalty()
+      break
+    }
   }
 
   if (isDoorOpen() && circleHitsRect(player, door)) {
-    hasWon = true
-    finalTime = elapsedSeconds
-    saveWinResult()
-    winScreen.classList.remove('hidden')
+    beginLevelTransition()
   }
 }
 
@@ -1233,6 +1419,33 @@ function drawFlashEffect() {
   ctx.restore()
 }
 
+function drawLevelTransitionOverlay() {
+  if (levelTransitionTime <= 0 || levelTransitionMessage === '') {
+    return
+  }
+
+  const [clearedText, enteringText] = levelTransitionMessage.split('|')
+
+  ctx.save()
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.76)'
+  ctx.fillRect(0, 0, canvasWidth, canvasHeight)
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.shadowColor = '#52ffe4'
+  ctx.shadowBlur = 24
+  ctx.fillStyle = '#e9fbff'
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.78)'
+  ctx.lineWidth = 8
+  ctx.font = '900 54px Inter, system-ui, sans-serif'
+  ctx.strokeText(clearedText, canvasWidth / 2, canvasHeight / 2 - 28)
+  ctx.fillText(clearedText, canvasWidth / 2, canvasHeight / 2 - 28)
+  ctx.shadowColor = '#ffe45c'
+  ctx.font = '900 34px Inter, system-ui, sans-serif'
+  ctx.strokeText(enteringText, canvasWidth / 2, canvasHeight / 2 + 38)
+  ctx.fillText(enteringText, canvasWidth / 2, canvasHeight / 2 + 38)
+  ctx.restore()
+}
+
 function drawPlayer() {
   ctx.save()
   ctx.shadowColor = '#5fffee'
@@ -1247,7 +1460,7 @@ function drawPlayer() {
   ctx.restore()
 }
 
-function drawGhost() {
+function drawGhost(ghost: GhostState) {
   ctx.save()
   ctx.shadowColor = '#ff3158'
   ctx.shadowBlur = 18
@@ -1269,12 +1482,21 @@ function drawGhost() {
   ctx.restore()
 }
 
+function drawGhosts() {
+  ghosts.forEach(drawGhost)
+}
+
 // Spotlight logic: build darkness on an offscreen canvas so the light cuts only
 // the darkness layer, not the actual maze pixels underneath.
 function drawDarkness() {
   if (!spotlight.enabled) {
     return
   }
+
+  const flickerScale = activeLevel.flicker
+    ? 0.92 + Math.sin(performance.now() / 65) * 0.05 + Math.sin(performance.now() / 19) * 0.025
+    : 1
+  const effectiveRadius = spotlight.radius * flickerScale
 
   darknessCtx.clearRect(0, 0, canvasWidth, canvasHeight)
   darknessCtx.fillStyle = 'rgba(0, 0, 0, 1)'
@@ -1284,17 +1506,17 @@ function drawDarkness() {
   const gradient = darknessCtx.createRadialGradient(
     spotlight.x,
     spotlight.y,
-    spotlight.radius * 0.2,
+    effectiveRadius * 0.2,
     spotlight.x,
     spotlight.y,
-    spotlight.radius,
+    effectiveRadius,
   )
   gradient.addColorStop(0, 'rgba(0, 0, 0, 1)')
   gradient.addColorStop(0.56, 'rgba(0, 0, 0, 1)')
   gradient.addColorStop(1, 'rgba(0, 0, 0, 0)')
   darknessCtx.fillStyle = gradient
   darknessCtx.beginPath()
-  darknessCtx.arc(spotlight.x, spotlight.y, spotlight.radius, 0, Math.PI * 2)
+  darknessCtx.arc(spotlight.x, spotlight.y, effectiveRadius, 0, Math.PI * 2)
   darknessCtx.fill()
   darknessCtx.globalCompositeOperation = 'source-over'
 
@@ -1307,20 +1529,20 @@ function drawDarkness() {
     0,
     spotlight.x,
     spotlight.y,
-    spotlight.radius,
+    effectiveRadius,
   )
   glow.addColorStop(0, 'rgba(178, 255, 242, 0.14)')
   glow.addColorStop(0.62, 'rgba(82, 255, 228, 0.06)')
   glow.addColorStop(1, 'rgba(82, 255, 228, 0)')
   ctx.fillStyle = glow
   ctx.beginPath()
-  ctx.arc(spotlight.x, spotlight.y, spotlight.radius, 0, Math.PI * 2)
+  ctx.arc(spotlight.x, spotlight.y, effectiveRadius, 0, Math.PI * 2)
   ctx.fill()
 
   ctx.strokeStyle = 'rgba(158, 255, 236, 0.58)'
   ctx.lineWidth = 2
   ctx.beginPath()
-  ctx.arc(spotlight.x, spotlight.y, spotlight.radius, 0, Math.PI * 2)
+  ctx.arc(spotlight.x, spotlight.y, effectiveRadius, 0, Math.PI * 2)
   ctx.stroke()
   ctx.restore()
 }
@@ -1333,9 +1555,10 @@ function render() {
   drawKeys()
   drawFloor67Symbols()
   drawPlayer()
-  drawGhost()
+  drawGhosts()
   drawDarkness()
   drawFlashEffect()
+  drawLevelTransitionOverlay()
   drawRitualOverlay()
 
   timeEl.textContent = formatTime(hasWon ? finalTime : elapsedSeconds)
@@ -1343,6 +1566,7 @@ function render() {
   doorStateEl.textContent = isDoorOpen() ? 'Door open' : 'Door locked'
   doorStateEl.classList.toggle('open', isDoorOpen())
   objectiveEl.textContent = getObjectiveText()
+  levelStatusEl.textContent = `Level ${currentLevelIndex + 1} / ${levels.length}`
   teamStatusEl.textContent = currentTeamName
   ghostHitsEl.textContent = `Ghost hits ${ghostHits}`
   lightModeEl.textContent = `Mode ${spotlightMode.toUpperCase()}`
