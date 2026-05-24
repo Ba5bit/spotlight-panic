@@ -1,5 +1,5 @@
 import './style.css'
-import { initAudio, playBeep } from './audio'
+import { initAudio, playBeep, startBackgroundMusic, stopBackgroundMusic } from './audio'
 import {
   canvasHeight,
   canvasWidth,
@@ -66,6 +66,7 @@ const spotlight = {
 }
 
 const input = new Set<string>()
+const timerScale = 0.8
 let appScreen: AppScreen = 'landing'
 let spotlightMode: SpotlightMode = 'mouse'
 let lastFrame = performance.now()
@@ -187,7 +188,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
           <span id="final-rank">Rank: NPC in the Dark</span>
           <span id="final-ghosts">Ghost hits: 0</span>
           <span id="final-fakes">Fake keys: 0</span>
-          <span id="final-breakdown">20000 base - 0 time - 0 ghost - 0 fake + 0 levels</span>
+          <span id="final-breakdown">18000 base - 0 time - 0 ghost - 0 fake + 0 levels</span>
           <span id="final-seed">Seed: -----</span>
           <div class="win-actions">
             <button id="next-team" type="button">Next Team</button>
@@ -219,10 +220,10 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         <h2>Score Calculator</h2>
         <div class="score-total">
           <span>Projected score</span>
-          <strong id="score-current">10000</strong>
+          <strong id="score-current">18000</strong>
         </div>
         <ol>
-          <li><span>Base score</span><strong id="score-base">+20000</strong></li>
+          <li><span>Base score</span><strong id="score-base">+18000</strong></li>
           <li><span>Time penalty</span><strong id="score-time">-0</strong></li>
           <li><span>Ghost hits</span><strong id="score-ghost">-0</strong></li>
           <li><span>Fake keys</span><strong id="score-fake">-0</strong></li>
@@ -230,6 +231,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
           <li><span>Floor 67 ritual</span><strong id="score-67">+0</strong></li>
           <li><span>No-hit bonus</span><strong id="score-no-hit">+1000</strong></li>
           <li><span>No-fake bonus</span><strong id="score-no-fake">+500</strong></li>
+          <li><span>Escape floor</span><strong id="score-floor">1000 min</strong></li>
           <li><span>Current rank</span><strong id="score-rank">Six Seven Certified</strong></li>
         </ol>
       </aside>
@@ -279,6 +281,7 @@ const scoreLevelsEl = document.querySelector<HTMLElement>('#score-levels')!
 const score67El = document.querySelector<HTMLElement>('#score-67')!
 const scoreNoHitEl = document.querySelector<HTMLElement>('#score-no-hit')!
 const scoreNoFakeEl = document.querySelector<HTMLElement>('#score-no-fake')!
+const scoreFloorEl = document.querySelector<HTMLElement>('#score-floor')!
 const scoreRankEl = document.querySelector<HTMLElement>('#score-rank')!
 const restartButton = document.querySelector<HTMLButtonElement>('#restart')!
 const landingStartButton = document.querySelector<HTMLButtonElement>('#landing-start')!
@@ -466,6 +469,7 @@ function showScreen(screen: AppScreen) {
   if (screen !== 'game') {
     gameStarted = false
     isPaused = false
+    stopBackgroundMusic()
   }
 
   if (screen === 'leaderboard') {
@@ -526,7 +530,7 @@ function getScoreBreakdownText(completionTime: number) {
     floor67Step === 'complete',
   )
 
-  return `${breakdown.baseScore} base - ${breakdown.timePenalty} time - ${breakdown.ghostPenalty} ghost - ${breakdown.fakeKeyPenalty} fake + ${breakdown.levelBonus} levels + ${breakdown.floor67Bonus} ritual + ${breakdown.noGhostBonus} no-hit + ${breakdown.noFakeKeyBonus} clean keys`
+  return `${breakdown.baseScore} base - ${breakdown.timePenalty} time - ${breakdown.ghostPenalty} ghost - ${breakdown.fakeKeyPenalty} fake + ${breakdown.levelBonus} levels + ${breakdown.floor67Bonus} ritual + ${breakdown.noGhostBonus} no-hit + ${breakdown.noFakeKeyBonus} clean keys, ${breakdown.survivalFloor} escape floor`
 }
 
 function escapeHtml(value: string) {
@@ -576,6 +580,7 @@ function updateScoreCalculator() {
   score67El.textContent = `+${breakdown.floor67Bonus}`
   scoreNoHitEl.textContent = `+${breakdown.noGhostBonus}`
   scoreNoFakeEl.textContent = `+${breakdown.noFakeKeyBonus}`
+  scoreFloorEl.textContent = `${breakdown.survivalFloor} min`
   scoreRankEl.textContent = getRank(breakdown.score)
 }
 
@@ -739,6 +744,7 @@ function startGameplay(mode: SpotlightMode) {
   lastFrame = performance.now()
   calibrationScreen.classList.add('hidden')
   initAudio()
+  startBackgroundMusic()
 }
 
 function togglePause() {
@@ -980,7 +986,7 @@ function moveGhostToward(ghost: GhostState, target: Vec2, speed: number, deltaSe
   const directionX = target.x - ghost.x
   const directionY = target.y - ghost.y
   const distance = Math.hypot(directionX, directionY)
-  const riskSpeed = ghostPanicTime > 0 ? speed * 1.35 : speed
+  const riskSpeed = ghostPanicTime > 0 ? speed * 1.6 : speed
 
   if (distance <= 0) {
     return
@@ -990,16 +996,16 @@ function moveGhostToward(ghost: GhostState, target: Vec2, speed: number, deltaSe
   ghost.y += (directionY / distance) * riskSpeed * deltaSeconds
 }
 
-// Chaser: direct pressure enemy. It always heads for the player, but the spotlight slows it.
+// Chaser: direct pressure enemy. The spotlight reveals it, but also makes it rush harder.
 function updateChaserGhost(ghost: GhostState, spotlighted: boolean, deltaSeconds: number) {
-  const speed = spotlighted ? ghost.speed * 0.42 : ghost.speed
+  const speed = spotlighted ? ghost.speed * 1.55 : ghost.speed
   moveGhostToward(ghost, player, speed, deltaSeconds)
 }
 
-// Patrol: route blocker. It follows waypoints and pauses briefly whenever the spotlight hits it.
+// Patrol: route blocker. It follows waypoints and only stutters briefly when the spotlight hits it.
 function updatePatrolGhost(ghost: GhostState, spotlighted: boolean, deltaSeconds: number) {
   if (spotlighted) {
-    ghost.pauseTime = Math.max(ghost.pauseTime, 0.35)
+    ghost.pauseTime = Math.max(ghost.pauseTime, 0.12)
   }
 
   ghost.pauseTime = Math.max(0, ghost.pauseTime - deltaSeconds)
@@ -1015,13 +1021,10 @@ function updatePatrolGhost(ghost: GhostState, spotlighted: boolean, deltaSeconds
   moveGhostToward(ghost, target, ghost.speed, deltaSeconds)
 }
 
-// Stalker: light-check enemy. It advances only in darkness and freezes under the spotlight.
+// Stalker: light-check enemy. It rushes in darkness and still creeps forward under the spotlight.
 function updateStalkerGhost(ghost: GhostState, spotlighted: boolean, deltaSeconds: number) {
-  if (spotlighted) {
-    return
-  }
-
-  moveGhostToward(ghost, player, ghost.speed, deltaSeconds)
+  const speed = spotlighted ? ghost.speed * 0.42 : ghost.speed * 1.25
+  moveGhostToward(ghost, player, speed, deltaSeconds)
 }
 
 function updateGhost(ghost: GhostState, deltaSeconds: number) {
@@ -1170,6 +1173,7 @@ function beginLevelTransition() {
   if (nextLevelIndex >= levels.length) {
     hasWon = true
     finalTime = elapsedSeconds
+    stopBackgroundMusic()
     saveWinResult()
     winScreen.classList.remove('hidden')
     return
@@ -1188,7 +1192,7 @@ function updateLevelTransition(deltaSeconds: number) {
     return false
   }
 
-  elapsedSeconds += deltaSeconds
+  elapsedSeconds += deltaSeconds * timerScale
   levelTransitionTime = Math.max(0, levelTransitionTime - deltaSeconds)
 
   if (levelTransitionTime === 0) {
@@ -1242,7 +1246,7 @@ function update(deltaSeconds: number) {
     return
   }
 
-  elapsedSeconds += deltaSeconds
+  elapsedSeconds += deltaSeconds * timerScale
   updateLightFlicker(deltaSeconds)
 
   const movement: Vec2 = { x: 0, y: 0 }

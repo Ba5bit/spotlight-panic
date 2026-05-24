@@ -14,8 +14,8 @@ export const levels: LevelData[] = [
     difficultyLabel: 'Training Floor',
     playerStart: { x: 62, y: 270 },
     spotlightRadius: 124,
-    spotlightRadiusMultiplier: 1,
-    ghostSpeedMultiplier: 1,
+    spotlightRadiusMultiplier: 0.95,
+    ghostSpeedMultiplier: 1.1,
     flicker: false,
     walls: [
       ...borderWalls,
@@ -71,8 +71,8 @@ export const levels: LevelData[] = [
     difficultyLabel: 'Storage Floor',
     playerStart: { x: 62, y: 86 },
     spotlightRadius: 124,
-    spotlightRadiusMultiplier: 0.9,
-    ghostSpeedMultiplier: 1.1,
+    spotlightRadiusMultiplier: 0.82,
+    ghostSpeedMultiplier: 1.3,
     flicker: false,
     walls: [
       ...borderWalls,
@@ -146,8 +146,8 @@ export const levels: LevelData[] = [
     difficultyLabel: 'Floor 67',
     playerStart: { x: 64, y: 462 },
     spotlightRadius: 124,
-    spotlightRadiusMultiplier: 0.8,
-    ghostSpeedMultiplier: 1.2,
+    spotlightRadiusMultiplier: 0.68,
+    ghostSpeedMultiplier: 1.5,
     flicker: true,
     walls: [
       ...borderWalls,
@@ -201,7 +201,7 @@ export const levels: LevelData[] = [
     ],
     door: { x: 900, y: 402, width: 26, height: 92 },
     ghosts: [
-      { x: 830, y: 66, speed: normalGhostSpeed + 4, type: 'chaser' },
+      { x: 830, y: 66, speed: normalGhostSpeed - 8, type: 'chaser' },
       { x: 610, y: 468, speed: normalGhostSpeed - 2, type: 'stalker' },
       {
         x: 506,

@@ -2,10 +2,10 @@ import { leaderboardStorageKey } from './constants'
 import type { LeaderboardEntry } from './types'
 
 export function getRank(score: number) {
-  if (score >= 18000) return 'Six Seven Certified'
-  if (score >= 15000) return 'Elite Light Operator'
-  if (score >= 12000) return 'Ghost Dodger'
-  if (score >= 9000) return 'Weak Aura Survivor'
+  if (score >= 12000) return 'Six Seven Certified'
+  if (score >= 8500) return 'Elite Light Operator'
+  if (score >= 5500) return 'Ghost Dodger'
+  if (score >= 2500) return 'Weak Aura Survivor'
 
   return 'NPC in the Dark'
 }
@@ -35,14 +35,15 @@ export function calculateScoreBreakdown(
 ) {
   const completionTimeSeconds = completionTime / 1000
   const floor67Bonus = floor67Complete ? 670 : 0
-  const timePenalty = Math.floor(completionTimeSeconds * 60)
-  const ghostPenalty = ghostHits * 700
-  const fakeKeyPenalty = fakeKeysTriggered * 400
+  const timePenalty = Math.floor(completionTimeSeconds * 130)
+  const ghostPenalty = ghostHits * 1000
+  const fakeKeyPenalty = fakeKeysTriggered * 700
   const levelBonus = levelsCleared * 1000
   const noGhostBonus = ghostHits === 0 ? 1000 : 0
   const noFakeKeyBonus = fakeKeysTriggered === 0 ? 500 : 0
-  const score =
-    20000 -
+  const survivalFloor = levelsCleared >= 3 ? 1000 : 0
+  const rawScore =
+    18000 -
     timePenalty -
     ghostPenalty -
     fakeKeyPenalty +
@@ -52,14 +53,15 @@ export function calculateScoreBreakdown(
     noFakeKeyBonus
 
   return {
-    baseScore: 20000,
+    baseScore: 18000,
     fakeKeyPenalty,
     floor67Bonus,
     ghostPenalty,
     levelBonus,
     noFakeKeyBonus,
     noGhostBonus,
-    score: Math.max(0, score),
+    score: Math.max(survivalFloor, rawScore),
+    survivalFloor,
     timePenalty,
   }
 }

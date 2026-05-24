@@ -1,4 +1,5 @@
 let audioContext: AudioContext | null = null
+let backgroundMusic: HTMLAudioElement | null = null
 
 export function initAudio() {
   try {
@@ -33,4 +34,30 @@ export function playBeep(frequency: number, duration = 0.12, type: OscillatorTyp
   } catch {
     audioContext = null
   }
+}
+
+export function startBackgroundMusic() {
+  try {
+    backgroundMusic ??= createBackgroundMusic()
+    backgroundMusic.play().catch(() => undefined)
+  } catch {
+    backgroundMusic = null
+  }
+}
+
+export function stopBackgroundMusic() {
+  if (!backgroundMusic) {
+    return
+  }
+
+  backgroundMusic.pause()
+  backgroundMusic.currentTime = 0
+}
+
+function createBackgroundMusic() {
+  const music = new Audio('/audio/pixel-mist.mp3')
+  music.loop = true
+  music.volume = 0.34
+
+  return music
 }
