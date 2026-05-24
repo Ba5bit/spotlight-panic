@@ -1,13 +1,13 @@
 # Spotlight Panic
 
-Spotlight Panic is a browser-based local co-op webcam maze game with a dark retro arcade horror style.
+Spotlight Panic is a browser-based local co-op party maze game with a dark retro arcade horror style.
 
-One player controls the runner with the keyboard. Another player controls the only spotlight by moving a bright object in front of the webcam, such as a phone with a white screen or white paper.
+The runner explores a maze while the only spotlight is controlled through the webcam by moving a bright object, such as a phone with a white screen or white paper. It can be played solo, but it is designed to be more chaotic as a party game where someone else takes over the light.
 
 ## Features
 
 - 960x540 HTML Canvas maze gameplay
-- Webcam-controlled spotlight tracking
+- Webcam-controlled spotlight tracking for the light operator
 - Mouse spotlight fallback for development and camera failures
 - Three hand-designed levels
 - Chaser, patrol, and stalker enemy types
@@ -59,12 +59,14 @@ npm run preview
 
 1. Enter a player name.
 2. Start a run.
-3. Hold a bright phone screen or white object in front of the webcam.
-4. Move the runner with `WASD` or arrow keys.
+3. Move the runner with `WASD` or arrow keys.
+4. Control the spotlight by holding a bright phone screen or white object in front of the webcam.
 5. Collect 3 real keys.
 6. Avoid ghosts and fake keys.
 7. Complete the Floor 67 ritual by shining the spotlight on `6`, then `7`.
 8. Escape through the unlocked door.
+
+For party play, one person can control movement while another controls the spotlight. For solo play, the same person can handle both.
 
 ## Controls
 
