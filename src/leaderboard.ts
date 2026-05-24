@@ -2,10 +2,10 @@ import { leaderboardStorageKey } from './constants'
 import type { LeaderboardEntry } from './types'
 
 export function getRank(score: number) {
-  if (score >= 12000) return 'Six Seven Certified'
-  if (score >= 8500) return 'Elite Light Operator'
-  if (score >= 5500) return 'Ghost Dodger'
-  if (score >= 2500) return 'Weak Aura Survivor'
+  if (score >= 18000) return 'Six Seven Certified'
+  if (score >= 15000) return 'Elite Light Operator'
+  if (score >= 12000) return 'Ghost Dodger'
+  if (score >= 9000) return 'Weak Aura Survivor'
 
   return 'NPC in the Dark'
 }
@@ -78,7 +78,7 @@ export function loadLeaderboard() {
       return []
     }
 
-    return parsedEntries.filter(isLeaderboardEntry).sort(sortLeaderboard)
+    return parsedEntries.map(normalizeLeaderboardEntry).filter(isLeaderboardEntry).sort(sortLeaderboard)
   } catch {
     return []
   }
@@ -105,7 +105,7 @@ function isLeaderboardEntry(entry: unknown): entry is LeaderboardEntry {
   const candidate = entry as Partial<LeaderboardEntry>
 
   return (
-    typeof candidate.teamName === 'string' &&
+    typeof candidate.playerName === 'string' &&
     typeof candidate.score === 'number' &&
     typeof candidate.completionTime === 'number' &&
     typeof candidate.levelsCleared === 'number' &&
@@ -115,4 +115,24 @@ function isLeaderboardEntry(entry: unknown): entry is LeaderboardEntry {
     typeof candidate.seed === 'string' &&
     typeof candidate.createdAt === 'string'
   )
+}
+
+function normalizeLeaderboardEntry(entry: unknown) {
+  if (!entry || typeof entry !== 'object') {
+    return entry
+  }
+
+  const legacyEntry = entry as Partial<LeaderboardEntry> & { teamName?: string }
+  if (typeof legacyEntry.playerName === 'string') {
+    return legacyEntry
+  }
+
+  if (typeof legacyEntry.teamName === 'string') {
+    return {
+      ...legacyEntry,
+      playerName: legacyEntry.teamName,
+    }
+  }
+
+  return entry
 }

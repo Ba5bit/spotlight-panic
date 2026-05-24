@@ -67,7 +67,7 @@ export type RitualFlash = Vec2 & {
 }
 
 export type LeaderboardEntry = {
-  teamName: string
+  playerName: string
   score: number
   completionTime: number
   levelsCleared: number

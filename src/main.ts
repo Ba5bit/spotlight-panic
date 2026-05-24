@@ -77,7 +77,7 @@ let finalTime = 0
 let levelTransitionTime = 0
 let levelTransitionTarget: number | null = null
 let levelTransitionMessage = ''
-let currentTeamName = 'Team NPC'
+let currentPlayerName = 'Player NPC'
 let runSeed = createRunSeed()
 let replaySeed: string | null = null
 let ghostHits = 0
@@ -107,53 +107,77 @@ let cameraRequestInFlight = false
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <main class="game-shell">
-    <section class="brand-strip" aria-label="Game title">
-      <div>
-        <h1>Spotlight Panic</h1>
-        <p>One player runs. One player controls the light.</p>
-      </div>
-      <div class="control-hints" aria-label="Controls">
-        <span>Move: WASD / Arrows</span>
-        <span>M: Mouse</span>
-        <span>C: Camera</span>
-        <span>L: Darkness</span>
-      </div>
-    </section>
-
     <section id="landing-screen" class="menu-screen">
-      <div class="menu-panel landing-panel">
-        <h2>Spotlight Panic</h2>
-        <p class="menu-subtitle">One player runs. One player controls the light.</p>
-        <p>Inspired by classic maze-chase arcade games, rebuilt as a local co-op webcam horror challenge.</p>
-        <div class="menu-actions">
-          <button id="landing-start" type="button">Start Party Run</button>
-          <button id="demo-mode" type="button">Demo Mode</button>
-          <button id="landing-leaderboard" type="button">View Leaderboard</button>
+      <div class="landing-shell">
+        <div class="landing-hero">
+          <p class="kicker">webcam co-op horror maze</p>
+          <h1>Spotlight Panic</h1>
+          <p class="hero-copy">One player explores the maze. The other controls the only light.</p>
+          <label class="player-field" for="player-name">
+            <span>Player name</span>
+            <input id="player-name" type="text" maxlength="28" placeholder="Player NPC" autocomplete="off" />
+          </label>
+          <div class="menu-actions primary-actions">
+            <button id="landing-start" type="button">Start Run</button>
+            <button id="landing-leaderboard" type="button">View Leaderboard</button>
+          </div>
+          <button id="demo-mode" type="button" class="hidden">Demo Mode</button>
+        </div>
+
+        <div class="landing-grid" aria-label="Game guide">
+          <article class="info-card how-card">
+            <span class="card-label">How to Play</span>
+            <ul>
+              <li>One player explores the maze.</li>
+              <li>The spotlight is controlled through the camera.</li>
+              <li>Collect keys, avoid ghosts, complete the 6 to 7 ritual, and escape.</li>
+            </ul>
+          </article>
+          <article class="info-card">
+            <span class="card-label">Enemies</span>
+            <ul>
+              <li><strong>Chaser Ghost</strong> moves directly toward the player and rushes when lit.</li>
+              <li><strong>Patrol Ghost</strong> patrols fixed routes and blocks corridors.</li>
+              <li><strong>Stalker Ghost</strong> moves in darkness and freezes in the light.</li>
+            </ul>
+          </article>
+          <article class="info-card">
+            <span class="card-label">Levels</span>
+            <div class="chip-list">
+              <span>Training Floor</span>
+              <span>Storage Floor</span>
+              <span>Floor 67</span>
+            </div>
+          </article>
+          <article class="info-card">
+            <span class="card-label">Rank Titles</span>
+            <ul class="rank-list">
+              <li><strong>18000+</strong> Six Seven Certified</li>
+              <li><strong>15000+</strong> Elite Light Operator</li>
+              <li><strong>12000+</strong> Ghost Dodger</li>
+              <li><strong>9000+</strong> Weak Aura Survivor</li>
+              <li><strong>below</strong> NPC in the Dark</li>
+            </ul>
+          </article>
         </div>
       </div>
     </section>
 
     <section id="team-screen" class="menu-screen hidden">
-      <div class="menu-panel">
-        <h2>Team Setup</h2>
-        <label class="team-field" for="team-name">
-          <span>Team name</span>
-          <input id="team-name" type="text" maxlength="28" placeholder="Team NPC" autocomplete="off" />
-        </label>
-        <div class="menu-actions">
-          <button id="start-run" type="button">Start Run</button>
-          <button id="setup-leaderboard" type="button">View Leaderboard</button>
-          <button id="setup-menu" type="button">Back to Menu</button>
-        </div>
+      <div class="hidden">
+        <button id="start-run" type="button">Start Run</button>
+        <button id="setup-leaderboard" type="button">View Leaderboard</button>
+        <button id="setup-menu" type="button">Back to Menu</button>
       </div>
     </section>
 
     <section id="leaderboard-screen" class="menu-screen hidden">
-      <div class="menu-panel leaderboard-panel">
+      <div class="arcade-panel leaderboard-panel">
+        <p class="kicker">local records</p>
         <h2>Leaderboard</h2>
         <div id="leaderboard-list" class="leaderboard-list"></div>
         <div class="menu-actions">
-          <button id="leaderboard-next-team" type="button">Next Team</button>
+          <button id="leaderboard-next-player" type="button">Next Player</button>
           <button id="leaderboard-menu" type="button">Back to Menu</button>
           <button id="clear-leaderboard" type="button">Clear Leaderboard</button>
         </div>
@@ -161,68 +185,79 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     </section>
 
     <section id="game-screen" class="play-layout hidden">
-      <div class="stage-wrap">
+      <div class="stage-wrap game-frame">
         <div class="hud" aria-label="Game status">
-          <span id="time">00:00.0</span>
-          <span id="keys">Keys 0 / 3</span>
-          <span id="door-state">Door locked</span>
-          <span id="light-mode">Light: mouse</span>
-          <span id="objective">Collect 3 keys</span>
-          <span id="level-status">Level 1 / 3</span>
-          <span id="floor-difficulty">Training Floor</span>
-          <span id="team-status">Team NPC</span>
-          <span id="ghost-hits">Ghost hits 0</span>
-          <span id="fake-keys">Fake keys 0</span>
-          <span id="marker-hud">Marker lost</span>
-          <span id="seed-hud">Seed -----</span>
-          <span id="controls-hud">WASD/Arrows - P pause - M mouse - C camera - L darkness</span>
+          <span class="hud-cell hud-time"><small>Time</small><strong id="time">00:00.0</strong></span>
+          <span class="hud-cell"><small>Keys</small><strong id="keys">0 / 3</strong></span>
+          <span class="hud-cell"><small>Floor</small><strong id="level-status">1 / 3</strong></span>
+          <span class="hud-cell objective-cell"><small>Objective</small><strong id="objective">Collect 3 keys</strong></span>
+          <span class="hud-cell score-cell"><small>Score</small><strong id="score-current">18000</strong></span>
           <button id="pause-button" type="button" class="hud-button">Pause</button>
+          <span id="door-state" class="hidden">Door locked</span>
+          <span id="light-mode" class="hidden">Light: camera</span>
+          <span id="seed-hud" class="hidden">Seed -----</span>
+          <span id="controls-hud" class="hidden"></span>
         </div>
-        <canvas id="game" width="${canvasWidth}" height="${canvasHeight}" aria-label="Spotlight Panic game board"></canvas>
+        <div class="canvas-shell">
+          <canvas id="game" width="${canvasWidth}" height="${canvasHeight}" aria-label="Spotlight Panic game board"></canvas>
+        </div>
         <canvas id="camera-analysis" class="analysis-canvas" width="160" height="90" aria-hidden="true"></canvas>
         <div id="win-screen" class="win-screen hidden" role="status" aria-live="polite">
-          <strong>You escaped the panic.</strong>
-          <span id="final-time">Completion time: 00:00.0</span>
-          <span id="final-team">Team NPC</span>
-          <span id="final-score">Score: 0</span>
-          <span id="final-rank">Rank: NPC in the Dark</span>
-          <span id="final-ghosts">Ghost hits: 0</span>
-          <span id="final-fakes">Fake keys: 0</span>
-          <span id="final-breakdown">18000 base - 0 time - 0 ghost - 0 fake + 0 levels</span>
-          <span id="final-seed">Seed: -----</span>
+          <p class="kicker">run complete</p>
+          <strong>You escaped the panic</strong>
+          <div class="result-grid">
+            <span><small>Player</small><b id="final-player">Player NPC</b></span>
+            <span><small>Final Score</small><b id="final-score">0</b></span>
+            <span><small>Time</small><b id="final-time">00:00.0</b></span>
+            <span><small>Levels Cleared</small><b id="final-levels">3</b></span>
+            <span><small>Ghost Hits</small><b id="final-ghosts">0</b></span>
+            <span><small>Fake Keys</small><b id="final-fakes">0</b></span>
+            <span><small>Rank</small><b id="final-rank">NPC in the Dark</b></span>
+            <span><small>Seed</small><b id="final-seed">-----</b></span>
+          </div>
+          <span id="final-breakdown" class="result-breakdown">18000 base - 0 time - 0 ghost - 0 fake + 0 levels</span>
           <div class="win-actions">
-            <button id="next-team" type="button">Next Team</button>
-            <button id="replay-seed" type="button">Replay Same Seed</button>
-            <button id="win-leaderboard" type="button">View Leaderboard</button>
+            <button id="restart" type="button">Play Again</button>
             <button id="win-menu" type="button">Back to Menu</button>
-            <button id="restart" type="button">Run again</button>
+            <button id="win-leaderboard" type="button">View Leaderboard</button>
+            <button id="next-player" type="button" class="hidden">Next Player</button>
+            <button id="replay-seed" type="button" class="hidden">Replay Same Seed</button>
           </div>
         </div>
         <div id="calibration-screen" class="calibration-screen" role="dialog" aria-modal="true">
+          <p class="kicker">spotlight setup</p>
           <strong>Hold a bright phone screen or white object in front of the webcam.</strong>
-          <span id="camera-status">CAMERA OFF</span>
-          <span id="marker-status">MARKER LOST</span>
+          <div class="status-row">
+            <span id="camera-status">CAMERA OFF</span>
+            <span id="marker-status">MARKER LOST</span>
+          </div>
           <span id="camera-detail">Camera starting...</span>
           <div class="calibration-actions">
-            <button id="start-mouse" type="button">Start With Mouse</button>
-            <button id="start-camera" type="button">Start With Camera</button>
-            <button id="retry-camera" type="button">Retry camera</button>
+            <button id="start-camera" type="button">Start Camera Run</button>
+            <button id="start-mouse" type="button">Continue Without Camera</button>
+            <button id="retry-camera" type="button">Retry Camera</button>
           </div>
         </div>
       </div>
 
-      <aside class="leaderboard score-panel" aria-label="Score calculator">
+      <aside class="side-panel" aria-label="Spotlight status">
         <div class="camera-panel" aria-label="Webcam preview panel">
-          <h2>Camera</h2>
+          <div>
+            <p class="kicker">Camera Live</p>
+            <h2>Spotlight Tracking</h2>
+          </div>
           <video id="camera-preview" class="camera-preview" autoplay muted playsinline aria-label="Webcam preview"></video>
-          <p>Mirrored preview. Move the bright marker the same way you want the spotlight to move.</p>
+          <p>Move a bright marker through the frame to steer the light.</p>
         </div>
-        <h2>Score Calculator</h2>
-        <div class="score-total">
-          <span>Projected score</span>
-          <strong id="score-current">18000</strong>
+        <div class="side-info">
+          <span><small>Player</small><strong id="player-status">Player NPC</strong></span>
+          <span><small>Floor</small><strong id="floor-difficulty">Training Floor</strong></span>
+          <span><small>Rank</small><strong id="score-rank">Six Seven Certified</strong></span>
+          <span><small>Marker</small><strong id="marker-hud">Marker lost</strong></span>
+          <span><small>Ghost Hits</small><strong id="ghost-hits">0</strong></span>
+          <span><small>Fake Keys</small><strong id="fake-keys">0</strong></span>
         </div>
-        <ol>
+        <ol class="hidden">
           <li><span>Base score</span><strong id="score-base">+18000</strong></li>
           <li><span>Time penalty</span><strong id="score-time">-0</strong></li>
           <li><span>Ghost hits</span><strong id="score-ghost">-0</strong></li>
@@ -244,7 +279,7 @@ const landingScreen = document.querySelector<HTMLElement>('#landing-screen')!
 const teamScreen = document.querySelector<HTMLElement>('#team-screen')!
 const gameScreen = document.querySelector<HTMLElement>('#game-screen')!
 const leaderboardScreen = document.querySelector<HTMLElement>('#leaderboard-screen')!
-const teamNameInput = document.querySelector<HTMLInputElement>('#team-name')!
+const playerNameInput = document.querySelector<HTMLInputElement>('#player-name')!
 const timeEl = document.querySelector<HTMLSpanElement>('#time')!
 const keysEl = document.querySelector<HTMLSpanElement>('#keys')!
 const doorStateEl = document.querySelector<HTMLSpanElement>('#door-state')!
@@ -252,7 +287,7 @@ const lightModeEl = document.querySelector<HTMLSpanElement>('#light-mode')!
 const objectiveEl = document.querySelector<HTMLSpanElement>('#objective')!
 const levelStatusEl = document.querySelector<HTMLSpanElement>('#level-status')!
 const floorDifficultyEl = document.querySelector<HTMLSpanElement>('#floor-difficulty')!
-const teamStatusEl = document.querySelector<HTMLSpanElement>('#team-status')!
+const playerStatusEl = document.querySelector<HTMLSpanElement>('#player-status')!
 const ghostHitsEl = document.querySelector<HTMLSpanElement>('#ghost-hits')!
 const fakeKeysEl = document.querySelector<HTMLSpanElement>('#fake-keys')!
 const markerHudEl = document.querySelector<HTMLSpanElement>('#marker-hud')!
@@ -265,7 +300,8 @@ const markerStatusEl = document.querySelector<HTMLSpanElement>('#marker-status')
 const cameraStatusEl = document.querySelector<HTMLSpanElement>('#camera-status')!
 const cameraDetailEl = document.querySelector<HTMLSpanElement>('#camera-detail')!
 const finalTimeEl = document.querySelector<HTMLSpanElement>('#final-time')!
-const finalTeamEl = document.querySelector<HTMLSpanElement>('#final-team')!
+const finalPlayerEl = document.querySelector<HTMLSpanElement>('#final-player')!
+const finalLevelsEl = document.querySelector<HTMLSpanElement>('#final-levels')!
 const finalScoreEl = document.querySelector<HTMLSpanElement>('#final-score')!
 const finalRankEl = document.querySelector<HTMLSpanElement>('#final-rank')!
 const finalGhostsEl = document.querySelector<HTMLSpanElement>('#final-ghosts')!
@@ -290,11 +326,11 @@ const landingLeaderboardButton = document.querySelector<HTMLButtonElement>('#lan
 const startRunButton = document.querySelector<HTMLButtonElement>('#start-run')!
 const setupLeaderboardButton = document.querySelector<HTMLButtonElement>('#setup-leaderboard')!
 const setupMenuButton = document.querySelector<HTMLButtonElement>('#setup-menu')!
-const nextTeamButton = document.querySelector<HTMLButtonElement>('#next-team')!
+const nextPlayerButton = document.querySelector<HTMLButtonElement>('#next-player')!
 const replaySeedButton = document.querySelector<HTMLButtonElement>('#replay-seed')!
 const winLeaderboardButton = document.querySelector<HTMLButtonElement>('#win-leaderboard')!
 const winMenuButton = document.querySelector<HTMLButtonElement>('#win-menu')!
-const leaderboardNextTeamButton = document.querySelector<HTMLButtonElement>('#leaderboard-next-team')!
+const leaderboardNextPlayerButton = document.querySelector<HTMLButtonElement>('#leaderboard-next-player')!
 const leaderboardMenuButton = document.querySelector<HTMLButtonElement>('#leaderboard-menu')!
 const clearLeaderboardButton = document.querySelector<HTMLButtonElement>('#clear-leaderboard')!
 const leaderboardList = document.querySelector<HTMLDivElement>('#leaderboard-list')!
@@ -376,9 +412,7 @@ canvas.addEventListener('mousemove', (event) => {
 })
 
 landingStartButton.addEventListener('click', () => {
-  demoMode = false
-  showScreen('teamSetup')
-  teamNameInput.focus()
+  beginRunFromSetup()
 })
 demoModeButton.addEventListener('click', () => {
   beginDemoMode()
@@ -393,16 +427,16 @@ setupMenuButton.addEventListener('click', () => {
   showScreen('landing')
 })
 startRunButton.addEventListener('click', beginRunFromSetup)
-teamNameInput.addEventListener('keydown', (event) => {
+playerNameInput.addEventListener('keydown', (event) => {
   if (event.key === 'Enter') {
     beginRunFromSetup()
   }
 })
 restartButton.addEventListener('click', resetGame)
 pauseButton.addEventListener('click', togglePause)
-nextTeamButton.addEventListener('click', () => {
-  showScreen('teamSetup')
-  teamNameInput.select()
+nextPlayerButton.addEventListener('click', () => {
+  showScreen('landing')
+  playerNameInput.select()
 })
 replaySeedButton.addEventListener('click', () => {
   replaySeed = runSeed
@@ -415,9 +449,9 @@ winLeaderboardButton.addEventListener('click', () => {
 winMenuButton.addEventListener('click', () => {
   showScreen('landing')
 })
-leaderboardNextTeamButton.addEventListener('click', () => {
-  showScreen('teamSetup')
-  teamNameInput.select()
+leaderboardNextPlayerButton.addEventListener('click', () => {
+  showScreen('landing')
+  playerNameInput.select()
 })
 leaderboardMenuButton.addEventListener('click', () => {
   showScreen('landing')
@@ -438,7 +472,7 @@ leaderboardList.addEventListener('click', (event) => {
   }
 
   replaySeed = seed
-  currentTeamName = 'Replay Team'
+  currentPlayerName = 'Retry Run'
   demoMode = false
   resetGame()
   showScreen('game')
@@ -478,15 +512,15 @@ function showScreen(screen: AppScreen) {
 }
 
 function beginRunFromSetup() {
-  const trimmedName = teamNameInput.value.trim()
-  currentTeamName = trimmedName === '' ? 'Team NPC' : trimmedName
+  const trimmedName = playerNameInput.value.trim()
+  currentPlayerName = trimmedName === '' ? 'Player NPC' : trimmedName
   demoMode = false
   resetGame()
   showScreen('game')
 }
 
 function beginDemoMode() {
-  currentTeamName = 'Demo Team'
+  currentPlayerName = 'Demo Player'
   demoMode = true
   resetGame()
   showScreen('game')
@@ -505,7 +539,7 @@ function createResultEntry() {
   )
 
   return {
-    teamName: currentTeamName,
+    playerName: currentPlayerName,
     score,
     completionTime,
     levelsCleared,
@@ -551,14 +585,15 @@ function saveWinResult() {
   saveLeaderboardEntry(latestResult)
   resultSaved = true
 
-  finalTeamEl.textContent = latestResult.teamName
-  finalTimeEl.textContent = `Completion time: ${formatResultTime(latestResult.completionTime)}`
-  finalScoreEl.textContent = `Score: ${latestResult.score}`
-  finalRankEl.textContent = `Rank: ${latestResult.rank}`
-  finalGhostsEl.textContent = `Ghost hits: ${latestResult.ghostHits}`
-  finalFakesEl.textContent = `Fake keys: ${latestResult.fakeKeysTriggered}`
+  finalPlayerEl.textContent = latestResult.playerName
+  finalTimeEl.textContent = formatResultTime(latestResult.completionTime)
+  finalScoreEl.textContent = latestResult.score.toString()
+  finalLevelsEl.textContent = latestResult.levelsCleared.toString()
+  finalRankEl.textContent = latestResult.rank
+  finalGhostsEl.textContent = latestResult.ghostHits.toString()
+  finalFakesEl.textContent = latestResult.fakeKeysTriggered.toString()
   finalBreakdownEl.textContent = getScoreBreakdownText(latestResult.completionTime)
-  finalSeedEl.textContent = `Seed: ${latestResult.seed}`
+  finalSeedEl.textContent = latestResult.seed
 }
 
 function updateScoreCalculator() {
@@ -599,14 +634,10 @@ function renderLeaderboard() {
           (entry, index) => `
             <li>
               <span class="leaderboard-place">#${index + 1}</span>
-              <span class="leaderboard-team">${escapeHtml(entry.teamName)}</span>
-              <span>${formatResultTime(entry.completionTime)}</span>
-              <span>${entry.ghostHits} hits</span>
-              <span>${entry.fakeKeysTriggered} fake</span>
-              <span>${entry.seed}</span>
+              <span class="leaderboard-player">${escapeHtml(entry.playerName)}</span>
               <strong>${entry.score}</strong>
               <span>${escapeHtml(entry.rank)}</span>
-              <button type="button" data-seed="${escapeHtml(entry.seed)}">Replay Same Seed</button>
+              <span>${formatResultTime(entry.completionTime)}</span>
             </li>
           `,
         )
@@ -787,7 +818,7 @@ async function requestCamera() {
 
   if (!navigator.mediaDevices?.getUserMedia) {
     cameraReady = false
-    cameraError = 'Camera API unavailable. Mouse fallback ready.'
+    cameraError = 'Camera unavailable. You can continue without camera.'
     setSpotlightMode('mouse')
     updateCameraStatus()
     return
@@ -813,7 +844,7 @@ async function requestCamera() {
     updateCameraStatus()
   } catch (error) {
     cameraReady = false
-    cameraError = error instanceof Error ? error.message : 'Webcam failed. Mouse fallback ready.'
+    cameraError = error instanceof Error ? error.message : 'Webcam failed. You can continue without camera.'
     setSpotlightMode('mouse')
     updateCameraStatus()
   } finally {
@@ -1725,17 +1756,17 @@ function render() {
   drawPauseOverlay()
 
   timeEl.textContent = formatTime(hasWon ? finalTime : elapsedSeconds)
-  keysEl.textContent = `Keys ${keysCollected} / ${requiredKeys}`
+  keysEl.textContent = `${keysCollected} / ${requiredKeys}`
   doorStateEl.textContent = isDoorOpen() ? 'Door open' : 'Door locked'
   doorStateEl.classList.toggle('open', isDoorOpen())
   objectiveEl.textContent = getObjectiveText()
-  levelStatusEl.textContent = `Level ${currentLevelIndex + 1} / ${levels.length}`
+  levelStatusEl.textContent = `${currentLevelIndex + 1} / ${levels.length}`
   floorDifficultyEl.textContent = activeLevel.difficultyLabel
-  teamStatusEl.textContent = currentTeamName
-  ghostHitsEl.textContent = `Ghost hits ${ghostHits}`
-  fakeKeysEl.textContent = `Fake keys ${fakeKeysTriggered}`
+  playerStatusEl.textContent = currentPlayerName
+  ghostHitsEl.textContent = ghostHits.toString()
+  fakeKeysEl.textContent = fakeKeysTriggered.toString()
   lightModeEl.textContent = `Mode ${spotlightMode.toUpperCase()}`
-  markerHudEl.textContent = markerDetected ? 'Marker detected' : 'Marker lost'
+  markerHudEl.textContent = markerDetected ? 'Detected' : 'Lost'
   markerHudEl.classList.toggle('detected', markerDetected)
   seedHudEl.textContent = `Seed ${runSeed}`
   controlsHudEl.textContent = 'WASD/Arrows - P pause - M mouse - C camera - L darkness'
