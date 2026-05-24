@@ -12,6 +12,7 @@
   --yellow: #ffe36a;
   --green: #43ff9b;
   --danger: #ff315c;
+  --ui-scale: 0.9;
   --font-pixel: "Pixelify Sans", "Press Start 2P", "VT323", "Courier New", monospace;
   font-family: var(--font-pixel);
   color: var(--text);
@@ -46,6 +47,12 @@ body {
     42px 42px,
     auto,
     auto;
+}
+
+#app {
+  display: grid;
+  min-height: 100svh;
+  place-items: center;
 }
 
 body::before {
@@ -93,10 +100,12 @@ ol {
 }
 
 .game-shell {
-  width: min(1500px, calc(100vw - 28px));
-  height: 100svh;
-  margin: 0 auto;
+  width: min(1500px, calc((100vw - 28px) / var(--ui-scale)));
+  height: calc(100svh / var(--ui-scale));
+  margin: 0;
   padding: 14px 0;
+  transform: scale(var(--ui-scale));
+  transform-origin: center;
 }
 
 .menu-screen {
