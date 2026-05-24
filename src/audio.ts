@@ -54,6 +54,10 @@ export function stopBackgroundMusic() {
   backgroundMusic.currentTime = 0
 }
 
+export function pauseBackgroundMusic() {
+  backgroundMusic?.pause()
+}
+
 function createBackgroundMusic() {
   const music = new Audio('/audio/pixel-mist.mp3')
   music.loop = true

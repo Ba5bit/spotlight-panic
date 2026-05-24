@@ -1,5 +1,11 @@
 import './style.css'
-import { initAudio, playBeep, startBackgroundMusic, stopBackgroundMusic } from './audio'
+import {
+  initAudio,
+  pauseBackgroundMusic,
+  playBeep,
+  startBackgroundMusic,
+  stopBackgroundMusic,
+} from './audio'
 import {
   canvasHeight,
   canvasWidth,
@@ -116,6 +122,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
           <label class="player-field" for="player-name">
             <span>Player name</span>
             <input id="player-name" type="text" maxlength="28" placeholder="Player NPC" autocomplete="off" />
+            <small id="player-name-error" class="field-error">Enter a player name to start.</small>
           </label>
           <div class="menu-actions primary-actions">
             <button id="landing-start" type="button">Start Run</button>
@@ -280,6 +287,7 @@ const teamScreen = document.querySelector<HTMLElement>('#team-screen')!
 const gameScreen = document.querySelector<HTMLElement>('#game-screen')!
 const leaderboardScreen = document.querySelector<HTMLElement>('#leaderboard-screen')!
 const playerNameInput = document.querySelector<HTMLInputElement>('#player-name')!
+const playerNameErrorEl = document.querySelector<HTMLElement>('#player-name-error')!
 const timeEl = document.querySelector<HTMLSpanElement>('#time')!
 const keysEl = document.querySelector<HTMLSpanElement>('#keys')!
 const doorStateEl = document.querySelector<HTMLSpanElement>('#door-state')!
@@ -402,7 +410,7 @@ window.addEventListener('keyup', (event) => {
 })
 
 canvas.addEventListener('mousemove', (event) => {
-  if (spotlightMode !== 'mouse') {
+  if (spotlightMode !== 'mouse' || isPaused) {
     return
   }
 
@@ -428,6 +436,8 @@ setupMenuButton.addEventListener('click', () => {
 })
 startRunButton.addEventListener('click', beginRunFromSetup)
 playerNameInput.addEventListener('keydown', (event) => {
+  playerNameInput.classList.remove('invalid')
+  playerNameErrorEl.classList.remove('visible')
   if (event.key === 'Enter') {
     beginRunFromSetup()
   }
@@ -513,7 +523,16 @@ function showScreen(screen: AppScreen) {
 
 function beginRunFromSetup() {
   const trimmedName = playerNameInput.value.trim()
-  currentPlayerName = trimmedName === '' ? 'Player NPC' : trimmedName
+  if (trimmedName === '') {
+    playerNameInput.classList.add('invalid')
+    playerNameErrorEl.classList.add('visible')
+    playerNameInput.focus()
+    return
+  }
+
+  playerNameInput.classList.remove('invalid')
+  playerNameErrorEl.classList.remove('visible')
+  currentPlayerName = trimmedName
   demoMode = false
   resetGame()
   showScreen('game')
@@ -576,6 +595,21 @@ function escapeHtml(value: string) {
     .replaceAll("'", '&#39;')
 }
 
+function getRankClass(rank: string) {
+  if (rank === 'Six Seven Certified') return 'rank-certified'
+  if (rank === 'Elite Light Operator') return 'rank-elite'
+  if (rank === 'Ghost Dodger') return 'rank-dodger'
+  if (rank === 'Weak Aura Survivor') return 'rank-survivor'
+
+  return 'rank-npc'
+}
+
+function setRankText(element: HTMLElement, rank: string) {
+  element.textContent = rank
+  element.classList.remove('rank-certified', 'rank-elite', 'rank-dodger', 'rank-survivor', 'rank-npc')
+  element.classList.add(getRankClass(rank))
+}
+
 function saveWinResult() {
   if (resultSaved) {
     return
@@ -589,7 +623,7 @@ function saveWinResult() {
   finalTimeEl.textContent = formatResultTime(latestResult.completionTime)
   finalScoreEl.textContent = latestResult.score.toString()
   finalLevelsEl.textContent = latestResult.levelsCleared.toString()
-  finalRankEl.textContent = latestResult.rank
+  setRankText(finalRankEl, latestResult.rank)
   finalGhostsEl.textContent = latestResult.ghostHits.toString()
   finalFakesEl.textContent = latestResult.fakeKeysTriggered.toString()
   finalBreakdownEl.textContent = getScoreBreakdownText(latestResult.completionTime)
@@ -616,7 +650,7 @@ function updateScoreCalculator() {
   scoreNoHitEl.textContent = `+${breakdown.noGhostBonus}`
   scoreNoFakeEl.textContent = `+${breakdown.noFakeKeyBonus}`
   scoreFloorEl.textContent = `${breakdown.survivalFloor} min`
-  scoreRankEl.textContent = getRank(breakdown.score)
+  setRankText(scoreRankEl, getRank(breakdown.score))
 }
 
 function renderLeaderboard() {
@@ -636,7 +670,7 @@ function renderLeaderboard() {
               <span class="leaderboard-place">#${index + 1}</span>
               <span class="leaderboard-player">${escapeHtml(entry.playerName)}</span>
               <strong>${entry.score}</strong>
-              <span>${escapeHtml(entry.rank)}</span>
+              <span class="${getRankClass(entry.rank)}">${escapeHtml(entry.rank)}</span>
               <span>${formatResultTime(entry.completionTime)}</span>
             </li>
           `,
@@ -760,6 +794,7 @@ function resetGame() {
   latestResult = null
   resultSaved = false
   isPaused = false
+  spotlight.enabled = true
   gameMessage = null
   flashEffect = null
   loadLevel(0)
@@ -770,6 +805,7 @@ function resetGame() {
 
 function startGameplay(mode: SpotlightMode) {
   setSpotlightMode(mode)
+  spotlight.enabled = true
   gameStarted = true
   isPaused = false
   lastFrame = performance.now()
@@ -785,6 +821,11 @@ function togglePause() {
 
   isPaused = !isPaused
   pauseButton.textContent = isPaused ? 'Resume' : 'Pause'
+  if (isPaused) {
+    pauseBackgroundMusic()
+  } else {
+    startBackgroundMusic()
+  }
   showMessage(isPaused ? 'PAUSED' : 'RESUME', 0.5, 'cyan')
 }
 
@@ -921,7 +962,7 @@ function analyzeCameraFrame() {
 
   markerDetected = brightPixels > 5 && totalWeight > 0
 
-  if (markerDetected && spotlightMode === 'camera') {
+  if (markerDetected && spotlightMode === 'camera' && !isPaused) {
     const averageX = weightedX / totalWeight
     const averageY = weightedY / totalWeight
     const normalizedX = clamp((averageX - width * 0.08) / (width * 0.84), 0, 1)
@@ -1261,8 +1302,6 @@ function updateLightFlicker(deltaSeconds: number) {
 
 // Game loop: advance the timer, read controls, update pickups, chase, and win state.
 function update(deltaSeconds: number) {
-  spotlight.x += (spotlight.targetX - spotlight.x) * 0.18
-  spotlight.y += (spotlight.targetY - spotlight.y) * 0.18
   updateFeedback(deltaSeconds)
 
   if (appScreen !== 'game' || !gameStarted || hasWon) {
@@ -1272,6 +1311,9 @@ function update(deltaSeconds: number) {
   if (isPaused) {
     return
   }
+
+  spotlight.x += (spotlight.targetX - spotlight.x) * 0.18
+  spotlight.y += (spotlight.targetY - spotlight.y) * 0.18
 
   if (updateLevelTransition(deltaSeconds)) {
     return
