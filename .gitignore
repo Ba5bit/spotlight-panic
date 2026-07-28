@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 
+# Local demo captures and deployment archives stay out of git.
+*.mov
+*.tar.gz
+*.zip
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
