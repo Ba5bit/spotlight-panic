@@ -233,7 +233,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         </div>
         <div id="calibration-screen" class="calibration-screen" role="dialog" aria-modal="true">
           <p class="kicker">spotlight setup</p>
-          <strong>Hold a bright phone screen or white object in front of the webcam.</strong>
+          <strong>Hold a spotlight in front of the webcam.</strong>
           <div class="status-row">
             <span id="camera-status">CAMERA OFF</span>
             <span id="marker-status">MARKER LOST</span>
